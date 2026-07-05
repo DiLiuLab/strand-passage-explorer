@@ -26,8 +26,8 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ## Repository Layout
 
 ```text
-strand_passage_guiV3_5.py        Main entry point: GUI, --nongui, and --demo
-link_engine_v3_5.py              Diagram engine and SnapPy bridge
+strand_passage_guiV3_6.py        Main entry point: GUI, --nongui, and --demo
+link_engine_v3_6.py              Diagram engine and SnapPy bridge
 draw_dt_original_labelsV3_11.py  DT parser, layout, renderer, and standalone GUI
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 assets/strand_passage_icon.png   Optional window/task-menu icon
@@ -40,7 +40,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV3_5 -> link_engine_v3_5 -> draw_dt_original_labelsV3_11
+strand_passage_guiV3_6 -> link_engine_v3_6 -> draw_dt_original_labelsV3_11
 ```
 
 ## Install
@@ -64,7 +64,7 @@ python3 -m pip install -r requirements.txt
 For full functionality, run with **Sage + SnapPy**:
 
 ```bash
-sage -python strand_passage_guiV3_5.py --help
+sage -python strand_passage_guiV3_6.py --help
 ```
 
 SnapPy is intentionally not pinned in `requirements.txt`, because this project
@@ -75,20 +75,20 @@ is intended to use the SnapPy/Sage installation on the research machine.
 Interactive GUI:
 
 ```bash
-sage -python strand_passage_guiV3_5.py
-sage -python strand_passage_guiV3_5.py --dt "DT: [(4,6,2)]"
+sage -python strand_passage_guiV3_6.py
+sage -python strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]"
 ```
 
 If the TkAgg backend is not available:
 
 ```bash
-python3 strand_passage_guiV3_5.py --gui-backend agg
+python3 strand_passage_guiV3_6.py --gui-backend agg
 ```
 
 Batch spreadsheet and overview SVG:
 
 ```bash
-sage -python strand_passage_guiV3_5.py --nongui \
+sage -python strand_passage_guiV3_6.py --nongui \
   --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
   --out strand_passage_results.xlsx
 ```
@@ -119,7 +119,7 @@ Custom displayed crossing IDs use the same syntax as
 `draw_dt_original_labelsV3_11.py`:
 
 ```bash
-sage -python strand_passage_guiV3_5.py \
+sage -python strand_passage_guiV3_6.py \
   --dt "DT: [(4,6,2)]" \
   --crossing-order "c1 c3 c2"
 ```
@@ -134,11 +134,16 @@ Spreadsheet columns to know:
 
 - `DT_code_chosen` is the visible DT code used for the drawn structure and for
   any next passage step.
-- In V3.5, the second pass is run once for each merged first-step structure,
-  not once for every raw first-step crossing. Second-pass sheets are named
-  `merged_<node>_<labels...>`, and the columns `first_step_passages` and
+- In V3.6, the second pass is run once for each merged first-step structure,
+  not once for every raw first-step crossing. A first-step result is continued
+  when `new_components > 2` and it has a usable `DT_code_chosen`; the CLI prints
+  this criterion and the resulting continuation counts. Second-pass sheets are
+  named `merged_<node>_<labels...>`, and the columns `first_step_passages` and
   `first_step_representative` show which first-step crossings merged together
   and which representative was continued.
+- The `run_info` sheet records the software version, engine/drawing modules,
+  runtime, command/arguments, output paths, key parameters, second-pass
+  continuation criterion, and continuation counts for that workbook.
 - Before a pass is enumerated, the source DT is simplified to the representative
   used for that pass's crossing-count baseline. This keeps continuation rows
   from being generated on a higher-crossing stale parent and prevents invalid
@@ -156,7 +161,7 @@ Spreadsheet columns to know:
 Headless cascade figure:
 
 ```bash
-python3 strand_passage_guiV3_5.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+python3 strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 ```
 
 Standalone DT comparison utility:
@@ -198,7 +203,7 @@ The launcher uses `sage -python` when Sage is available, and falls back to
 To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
-chmod +x strand_passage_guiV3_5.py
+chmod +x strand_passage_guiV3_6.py
 chmod +x draw_dt_original_labelsV3_11.py
 chmod +x check_two_dt.py
 ```
@@ -206,13 +211,13 @@ chmod +x check_two_dt.py
 Then they can be run as:
 
 ```bash
-./strand_passage_guiV3_5.py --gui-backend agg
+./strand_passage_guiV3_6.py --gui-backend agg
 ```
 
 For SnapPy/Jones functionality, prefer:
 
 ```bash
-sage -python ./strand_passage_guiV3_5.py
+sage -python ./strand_passage_guiV3_6.py
 ```
 
 ## Notes

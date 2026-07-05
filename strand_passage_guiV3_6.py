@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-strand_passage_guiV3_5.py  (V3.5)
+strand_passage_guiV3_6.py  (V3.6)
 =================================
 
 Interactive strand-passage explorer with component-colour preservation.
+
+What is new in V3.6
+-------------------
+* ``--nongui`` second-pass continuation now uses the criterion
+  ``new_components > 2`` (plus a usable chosen DT code), and prints that
+  criterion in the CLI output.
+* ``--nongui`` workbooks include a ``run_info`` sheet with software versions,
+  runtime details, command/arguments, output paths, key parameters, and
+  continuation counts for the current result.
 
 What is new in V3.5
 -------------------
@@ -25,7 +34,7 @@ What is new in V3.4
   when present.  Missing or unsupported icon assets are ignored, so the scripts
   still run from a plain source checkout.
 * Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_5.py``).
+  ``link_engine_v3_6.py``).
 
 What is new in V3.3
 -------------------
@@ -42,7 +51,7 @@ What is new in V3.3
 What is new in V3.2
 -------------------
 * Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_5.py``), and 2-D links are drawn with that helper's own
+  ``link_engine_v3_6.py``), and 2-D links are drawn with that helper's own
   DEFAULT settings (default layout, top-to-bottom orientation, false-crossing
   audit with a planar fallback).
 * DT-code choice rule, applied everywhere (GUI and ``--nongui`` spreadsheet):
@@ -71,17 +80,17 @@ What is new in V3.2
   operation order; topologically identical structures are merged into one card.
 
 Non-interactive spreadsheet (behaves like the old strand_pass_sage.py):
-    sage -python strand_passage_guiV3_5.py --nongui \
+    sage -python strand_passage_guiV3_6.py --nongui \
         --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
         --out strand_passage_results.xlsx
 
 Interactive run:
-    sage -python strand_passage_guiV3_5.py                 # SnapPy enabled
-    sage -python strand_passage_guiV3_5.py --dt "DT: [(4,6,2)]"
-    python3 strand_passage_guiV3_5.py --gui-backend agg    # if TkAgg won't load
+    sage -python strand_passage_guiV3_6.py                 # SnapPy enabled
+    sage -python strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]"
+    python3 strand_passage_guiV3_6.py --gui-backend agg    # if TkAgg won't load
 
 Headless cascade figure (no display needed):
-    python3 strand_passage_guiV3_5.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+    python3 strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 """
 
 from __future__ import annotations
@@ -89,7 +98,9 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+from datetime import datetime
 import os
+import shlex
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -100,12 +111,14 @@ import numpy as np
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import draw_dt_original_labelsV3_11 as D          # noqa: E402
-import link_engine_v3_5 as E                       # noqa: E402
+import link_engine_v3_6 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
                "brown", "pink", "gray", "olive", "cyan"]
 DEFAULT_DT = "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]"
-VERSION = "3.5"
+VERSION = "3.6"
+NONGUI_SECOND_PASS_CRITERION = (
+    "first-step new_components > 2 and DT_code_chosen is available")
 DEFAULT_BACKTRACK_ROUNDS = getattr(E, "DEFAULT_BACKTRACK_ROUNDS", 200)
 DEFAULT_BACKTRACK_STEPS = getattr(E, "DEFAULT_BACKTRACK_STEPS", 30)
 
@@ -206,7 +219,7 @@ def warn_if_no_sage():
         "[warning] Not running under Sage: Jones polynomials (and the SnapPy "
         "invariant colour-matching that relies on them) cannot be computed. "
         "For full functionality run this with 'sage -python "
-        "strand_passage_guiV3_5.py ...'.\n")
+        "strand_passage_guiV3_6.py ...'.\n")
 
 
 # --------------------------------------------------------------------------- #
@@ -682,6 +695,68 @@ def _safe_sheet_name(base, used):
     return name
 
 
+def _module_version(module):
+    """Best-effort version string for a runtime dependency."""
+    for attr in ("VERSION", "__version__", "version"):
+        try:
+            value = getattr(module, attr)
+            if callable(value):
+                value = value()
+            if value is not None:
+                return str(value)
+        except Exception:  # noqa: BLE001
+            pass
+    return "unknown"
+
+
+def _runtime_command():
+    """Reconstruct the command that is useful to paste into a terminal."""
+    prefix = ["sage", "-python"] if _running_under_sage() else [sys.executable]
+    return shlex.join(prefix + list(sys.argv))
+
+
+def _run_info_rows(snappy, pandas_module, dt_string, dt_code, out_path,
+                   overview_path, negative_even, backtrack_rounds,
+                   backtrack_steps, crossing_order, crossing_map,
+                   first_pass_rows, continuable_first_passages,
+                   merged_first_step_continuations, second_pass_sheets,
+                   second_pass_rows):
+    """Workbook metadata for reproducible nongui output."""
+    return [
+        ("created_at", datetime.now().astimezone().isoformat(timespec="seconds")),
+        ("software", "Strand-Passage Explorer"),
+        ("software_version", VERSION),
+        ("entry_script", os.path.basename(sys.argv[0]) if sys.argv else ""),
+        ("engine_module", getattr(E, "__name__", "unknown")),
+        ("engine_version", getattr(E, "VERSION", "unknown")),
+        ("drawing_module", getattr(D, "__name__", "unknown")),
+        ("drawing_version", getattr(D, "VERSION", "unknown")),
+        ("python_version", sys.version.replace("\n", " ")),
+        ("python_executable", sys.executable),
+        ("running_under_sage", str(_running_under_sage())),
+        ("snappy_version", _module_version(snappy)),
+        ("pandas_version", _module_version(pandas_module)),
+        ("command", _runtime_command()),
+        ("argv", repr(sys.argv)),
+        ("working_directory", os.getcwd()),
+        ("input_dt", dt_string),
+        ("normalized_input_dt", _dt_code_to_str(dt_code)),
+        ("negative_even", negative_even),
+        ("output_xlsx", out_path),
+        ("overview_svg", overview_path),
+        ("backtrack_rounds", int(backtrack_rounds or 0)),
+        ("backtrack_steps", int(backtrack_steps or 0)),
+        ("crossing_order", crossing_order or ""),
+        ("crossing_map", crossing_map or ""),
+        ("second_pass_continuation_criterion", NONGUI_SECOND_PASS_CRITERION),
+        ("first_pass_rows", int(first_pass_rows)),
+        ("continuable_first_step_passages", int(continuable_first_passages)),
+        ("merged_first_step_continuations", int(merged_first_step_continuations)),
+        ("second_pass_sheets", int(second_pass_sheets)),
+        ("second_pass_rows", int(second_pass_rows)),
+    ]
+
+
 def _edge_list_from_map(edge_map):
     """Convert the overview edge accumulator into a sorted serializable list."""
     return [{"src": s, "dst": d, "labels": sorted(l, key=_label_sort_key)}
@@ -1135,6 +1210,9 @@ def run_nongui(dt_string, out_path, negative_even="over",
 
     V3.5 enumerates the second pass once per merged/reconciled first-step
     structure, not once per raw first-step crossing.
+
+    V3.6 continues only first-step structures with ``new_components > 2`` and a
+    usable chosen DT code.
     """
     try:
         import snappy  # type: ignore
@@ -1219,19 +1297,20 @@ def run_nongui(dt_string, out_path, negative_even="over",
         backtrack_steps=backtrack_steps)
 
     print("[info] first-step merge ...")
+    print("[info] second-pass continuation criterion: %s"
+          % NONGUI_SECOND_PASS_CRITERION)
     second_pass_results_dict = {}
-    eligible_by_label: Dict[str, Dict[str, Any]] = {}
-    eligible_first_passages = 0
+    continuable_by_label: Dict[str, Dict[str, Any]] = {}
+    continuable_first_passages = 0
     for res, chosen_code in zip(results, chosen_codes):
         nid = get_node(chosen_code, 1, res['snappy_crossings'],
                        res['new_components'], res['Jones_polynomial'])
         label = str(res['flipped_crossing'])
         edges.setdefault((root_id, nid), set()).add(label)
-        if (res['new_components'] == res['orig_components']
-                and res['new_components'] is not None
-                and chosen_code):
-            eligible_first_passages += 1
-            eligible_by_label[label] = res
+        new_components = res.get('new_components')
+        if new_components is not None and int(new_components) > 2 and chosen_code:
+            continuable_first_passages += 1
+            continuable_by_label[label] = res
 
     # V3.5: before enumerating the second pass, collapse the first-step graph to
     # the same merged representatives shown in the overview.  That prevents
@@ -1271,14 +1350,17 @@ def run_nongui(dt_string, out_path, negative_even="over",
         dst = id_to_node.get(edge["dst"])
         if dst is None or dst["depth"] != 1:
             continue
-        labels = [str(x) for x in edge["labels"] if str(x) in eligible_by_label]
+        labels = [str(x) for x in edge["labels"] if str(x) in continuable_by_label]
         if labels:
             first_step_labels.setdefault(edge["dst"], set()).update(labels)
 
-    if eligible_first_passages:
+    if continuable_first_passages:
         print("[info] second pass uses %d merged first-step structure(s) "
-              "from %d eligible first-step passage(s)"
-              % (len(first_step_labels), eligible_first_passages))
+              "from %d continuable first-step passage(s)"
+              % (len(first_step_labels), continuable_first_passages))
+    else:
+        print("[info] second pass uses 0 merged first-step structure(s) "
+              "from 0 continuable first-step passage(s)")
 
     used_sheet_names = set()
     print("[info] second pass ...")
@@ -1318,7 +1400,18 @@ def run_nongui(dt_string, out_path, negative_even="over",
     if not str(out_path).endswith(".xlsx"):
         out_path = str(out_path) + ".xlsx"
 
+    overview_path = out_path[:-5] + "_overview.svg"
+    second_pass_rows = sum(len(sheet_data)
+                           for sheet_data in second_pass_results_dict.values())
+    run_info = _run_info_rows(
+        snappy, pd, dt_string, dt_code, out_path, overview_path,
+        negative_even, backtrack_rounds, backtrack_steps,
+        crossing_order, crossing_map, len(results), continuable_first_passages,
+        len(first_step_labels), len(second_pass_results_dict), second_pass_rows)
+
     with pd.ExcelWriter(out_path, engine='openpyxl') as writer:
+        pd.DataFrame(run_info, columns=["field", "value"]).to_excel(
+            writer, index=False, sheet_name='run_info')
         pd.DataFrame(results).to_excel(writer, index=False, sheet_name='first_pass')
         for sheet_name, sheet_data in second_pass_results_dict.items():
             pd.DataFrame(sheet_data).to_excel(writer, index=False,
@@ -1326,7 +1419,6 @@ def run_nongui(dt_string, out_path, negative_even="over",
     print("[ok] wrote %s" % out_path)
 
     # overview SVG of all (merged) resulting structures
-    overview_path = out_path[:-5] + "_overview.svg"
     node_list = [nodes[fp] for fp in order]
     edge_list = [{"src": s, "dst": d, "labels": sorted(l, key=_label_sort_key)}
                  for (s, d), l in edges.items()]
@@ -1799,7 +1891,7 @@ def run_gui(dt_string=None, negative_even="over", use_snappy_global=True,
 # --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser(
-        prog="strand_passage_guiV3_5.py",
+        prog="strand_passage_guiV3_6.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Strand passage explorer V%s\n"
@@ -1816,17 +1908,17 @@ def main():
             % VERSION),
         epilog=(
             "examples:\n"
-            "  sage -python strand_passage_guiV3_5.py\n"
-            "  sage -python strand_passage_guiV3_5.py --dt \"DT: [(4,6,2)]\"\n"
-            "  sage -python strand_passage_guiV3_5.py --backtrack "
+            "  sage -python strand_passage_guiV3_6.py\n"
+            "  sage -python strand_passage_guiV3_6.py --dt \"DT: [(4,6,2)]\"\n"
+            "  sage -python strand_passage_guiV3_6.py --backtrack "
             "--backtrack-rounds 50 --backtrack-steps 25\n"
-            "  sage -python strand_passage_guiV3_5.py --nongui \\\n"
+            "  sage -python strand_passage_guiV3_6.py --nongui \\\n"
             "       --dt \"DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),"
             "(-20,-6,-18,-4)]\" \\\n"
             "       --out results.xlsx --backtrack --backtrack-rounds 50\n"
-            "  python3 strand_passage_guiV3_5.py --dt \"DT: [(4,6,2)]\" "
+            "  python3 strand_passage_guiV3_6.py --dt \"DT: [(4,6,2)]\" "
             "--demo 2 1 --out chain.png\n"
-            "  python3 strand_passage_guiV3_5.py --gui-backend agg   "
+            "  python3 strand_passage_guiV3_6.py --gui-backend agg   "
             "# if TkAgg won't load\n"))
     ap.add_argument("--dt", default=None, metavar="STR",
                     help="signed DT code string, e.g. \"DT: [(4,6,2)]\" "
@@ -1857,10 +1949,10 @@ def main():
                          "do not combine with --crossing-order")
     ap.add_argument("--backtrack", action="store_true",
                     help="(kept for compatibility; backtrack is ON by default "
-                         "in V3.5 -- use --no-backtrack to disable)")
+                         "in V3.6 -- use --no-backtrack to disable)")
     ap.add_argument("--no-backtrack", action="store_true",
                     help="disable backtrack-assisted SnapPy simplification "
-                         "(V3.5 enables it by default)")
+                         "(V3.6 enables it by default)")
     ap.add_argument("--backtrack-rounds", type=int, metavar="N",
                     default=DEFAULT_BACKTRACK_ROUNDS,
                     help="backtrack rounds (default %d)"
@@ -1872,7 +1964,7 @@ def main():
     args = ap.parse_args()
 
     use_snappy_global = not args.no_snappy_global
-    backtrack_enabled = not args.no_backtrack           # ON by default (V3.5)
+    backtrack_enabled = not args.no_backtrack           # ON by default (V3.6)
     backtrack_rounds = args.backtrack_rounds if backtrack_enabled else 0
     backtrack_steps = args.backtrack_steps
 
@@ -1892,7 +1984,7 @@ def main():
 
     if args.demo is not None:
         dt = args.dt or "DT: [(4,6,2)]"
-        out = args.out or "strand_passage_chain_v3_5.png"
+        out = args.out or "strand_passage_chain_v3_6.png"
         render_chain(dt, args.demo, out, negative_even=args.negative_even,
                      use_snappy_global=use_snappy_global,
                      backtrack_rounds=backtrack_rounds,
