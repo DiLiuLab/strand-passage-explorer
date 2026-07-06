@@ -28,7 +28,7 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ```text
 strand_passage_guiV3_8.py        Main entry point: GUI, --nongui, and --demo
 link_engine_v3_8.py              Diagram engine and SnapPy bridge
-draw_dt_original_labelsV3_12.py  DT parser, layout, renderer, and standalone GUI
+draw_dt_original_labelsV3_14.py  DT parser, layout, renderer, and standalone GUI
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
 assets/strand_passage_icon.png   Optional window/task-menu icon
@@ -41,7 +41,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV3_8 -> link_engine_v3_8 -> draw_dt_original_labelsV3_12
+strand_passage_guiV3_8 -> link_engine_v3_8 -> draw_dt_original_labelsV3_14
 ```
 
 ## Install
@@ -117,7 +117,7 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 directory and basename of the spreadsheet path.
 
 Custom displayed crossing IDs use the same syntax as
-`draw_dt_original_labelsV3_12.py`:
+`draw_dt_original_labelsV3_14.py`:
 
 ```bash
 sage -python strand_passage_guiV3_8.py \
@@ -228,7 +228,7 @@ To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
 chmod +x strand_passage_guiV3_8.py
-chmod +x draw_dt_original_labelsV3_12.py
+chmod +x draw_dt_original_labelsV3_14.py
 chmod +x check_two_dt.py
 chmod +x find_link_in_snappy.py
 ```
@@ -252,14 +252,17 @@ sage -python ./strand_passage_guiV3_8.py
   tune it.
 - A negative even DT label means the even visit is the over strand by default.
   Use `--negative-even under` for the opposite convention.
-- Generated outputs such as `*.xlsx`, `*_overview*.svg`, and cascade PNGs are
-  ignored by Git.
+- Generated outputs such as `*.xlsx`, `*_overview*.svg`, `*.xyz`, and cascade
+  PNGs are ignored by Git.
 - The `--nongui` overview SVG keeps labels and captions as editable text using
   Arial, so text can be selected and edited in Illustrator/Inkscape. V3.8 also
   enlarges the surrounding label boxes/circles so the exported SVG better
   matches the live Matplotlib view in Illustrator.
-- Standalone SVGs from `draw_dt_original_labelsV3_12.py` use the same Arial
-  editable-text policy and roomier DT-label/crossing-ID boxes.
+- Standalone SVGs from `draw_dt_original_labelsV3_14.py` use the same Arial
+  editable-text policy and roomier DT-label/crossing-ID boxes. V3.13 fixed
+  over/under gaps at self-crossings such as the trefoil `DT: [(4,6,2)]`; V3.14
+  keeps requested layouts even when they create false crossings, highlights
+  those artifacts, and adds a visible metadata caption to saved diagrams.
 - In the drawing helper GUI, saved SVG font sizes follow the live GUI fields:
   `DT label font` maps to `--font-size`, and `crossing ID font` maps to
   `--crossing-id-font-size`.

@@ -1,11 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-draw_dt_original_labelsV3_12.py
+draw_dt_original_labelsV3_14.py
 ===============================
 
 Draw a smooth planar oriented link diagram from a signed Dowker-Thistlethwaite
 (DT) code while preserving the original traversal labels supplied by the user.
+
+V3.14 changes
+-------------
+* The chosen 2D layout is now kept as requested even when it introduces false
+  crossings -- there is no automatic fallback to 'planar'.  This preserves, for
+  example, a "failed" kamada layout for inspection.
+* False crossings (accidental strand overlaps a layout adds away from true DT
+  crossings) are now drawn with the same over/under gap style as real crossings.
+  The over/under choice there is arbitrary (chosen deterministically), since a
+  false crossing is not a real DT crossing.
+* A red warning listing the number of false crossings is shown on the live
+  preview and saved into the exported image/SVG.
+* The diagram metadata (script name/version and essential facts) is now also
+  drawn as a visible caption at the bottom of the saved image, in addition to
+  being written as file metadata.
+
+V3.13 changes
+-------------
+* Over/under gaps now render correctly on self-crossings (e.g. the trefoil
+  DT: [(4,6,2)]).  Local crossing pieces are selected by arc length along the
+  curve parameter instead of by spatial distance, so a component that passes
+  through one crossing twice no longer re-covers its own under-strand gap.
+* Saved diagrams embed metadata: the generating script name and version plus
+  essential facts (component and crossing counts and the key drawing
+  parameters).  For SVG these appear in the file's <metadata> block.
+* GUI: the Signed DT code box (now two lines) and the output-image / Sphere-XYZ
+  path fields sit at the top of the left column, directly above the live
+  preview, where long values have full width.  The Sphere XYZ parameter section
+  moved to the bottom of the right panel.  The mouse wheel now scrolls the right
+  parameter panel.  The CSV table field was removed -- "Save table" writes the
+  table beside the output image with the same name and a .csv extension.  The
+  redundant "Refresh preview" button was removed ("Refresh 2D" remains).
 
 V3.12 changes
 -------------
@@ -61,7 +93,7 @@ Outputs:
   and a spherical XYZ coordinate file with blank lines between components.
 
 Example:
-  python draw_dt_original_labelsV3_12.py \
+  python draw_dt_original_labelsV3_14.py \
     --dt 'DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]' \
     --output example_v3.svg \
     --table example_v3.csv \
@@ -97,6 +129,8 @@ matplotlib.rcParams["svg.fonttype"] = "none"
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
 DIAGRAM_FONT_FAMILY = "Arial"
+SCRIPT_VERSION = "V3.14"
+VERSION = SCRIPT_VERSION
 DT_LABEL_BOX_PAD = 0.22
 CROSSING_ID_BOX_PAD = 0.28
 matplotlib.rcParams["font.family"] = DIAGRAM_FONT_FAMILY
@@ -744,6 +778,82 @@ def audit_false_crossings(model, P, centers, samples=26):
     return false
 
 
+def _seg_intersect_point(p1, p2, p3, p4):
+    """Return the intersection point of segments p1p2 and p3p4, or None."""
+    p1 = np.asarray(p1, float)
+    p2 = np.asarray(p2, float)
+    p3 = np.asarray(p3, float)
+    p4 = np.asarray(p4, float)
+    r = p2 - p1
+    s = p4 - p3
+    rxs = r[0] * s[1] - r[1] * s[0]
+    if abs(rxs) < 1.0e-12:
+        return None
+    qp = p3 - p1
+    t = (qp[0] * s[1] - qp[1] * s[0]) / rxs
+    u = (qp[0] * r[1] - qp[1] * r[0]) / rxs
+    if (1.0e-6 < t < 1.0 - 1.0e-6) and (1.0e-6 < u < 1.0 - 1.0e-6):
+        return p1 + t * r
+    return None
+
+
+def find_false_crossings_in_curves(dense_curves, true_centers_xy, exclude_radius):
+    """Locate false crossings among already-rendered curves.
+
+    ``dense_curves`` is a list of Nx2 arrays (one per component, in final drawing
+    coordinates).  Segment intersections that fall within ``exclude_radius`` of a
+    true crossing center are ignored, so only the accidental overlaps introduced
+    by the layout are reported.  Returns a list of dicts, each describing one
+    false crossing with the two participating strands::
+
+        {"point": (x, y),
+         "a": {"curve": ci_a, "index": i_a},
+         "b": {"curve": ci_b, "index": i_b}}
+    """
+    centers = [np.asarray(c, float) for c in (true_centers_xy or [])]
+    excl2 = float(exclude_radius) ** 2
+
+    def _near_true_center(pt):
+        for c in centers:
+            d = pt - c
+            if float(d[0] * d[0] + d[1] * d[1]) < excl2:
+                return True
+        return False
+
+    segs = []
+    for ci, dense in enumerate(dense_curves):
+        pts = np.asarray(dense, float)
+        n = len(pts)
+        if n < 3:
+            continue
+        for i in range(n):
+            a = pts[i]
+            b = pts[(i + 1) % n]
+            mid = 0.5 * (a + b)
+            if _near_true_center(a) or _near_true_center(b) or _near_true_center(mid):
+                continue
+            segs.append((ci, i, n, a, b))
+
+    found = []
+    for x in range(len(segs)):
+        cia, ia, na, pa, pb = segs[x]
+        for y in range(x + 1, len(segs)):
+            cib, ib, nb, pc, pd = segs[y]
+            if cia == cib:
+                circular_gap = min(abs(ia - ib), na - abs(ia - ib))
+                if circular_gap <= 1:
+                    continue
+            pt = _seg_intersect_point(pa, pb, pc, pd)
+            if pt is None:
+                continue
+            found.append({
+                "point": (float(pt[0]), float(pt[1])),
+                "a": {"curve": cia, "index": ia},
+                "b": {"curve": cib, "index": ib},
+            })
+    return found
+
+
 # --------------------------------------------------------------------------- #
 #  6. Drawing
 # --------------------------------------------------------------------------- #
@@ -1093,6 +1203,80 @@ def _plot_local_curve_piece(ax, dense, center, radius, color, lw, zorder,
         )
 
 
+def _local_arclen_run(dense, center_index, radius):
+    """Indices within ``radius`` arc length of ``center_index`` along a closed curve.
+
+    Unlike a spatial-distance test, this follows the curve *parameter*, so on a
+    self-crossing -- where the same closed component passes through one point
+    twice -- it selects only the single pass that owns ``center_index``.  A
+    spatial radius would grab both passes, which is why over/under gaps were
+    invisible on knots with self-crossings (e.g. the trefoil): the under gap was
+    immediately re-covered when the over pass was redrawn.
+    """
+    pts = np.asarray(dense, float)
+    n = len(pts)
+    if n < 3:
+        return np.arange(n, dtype=int)
+    radius = float(radius)
+    i0 = int(center_index) % n
+
+    back = 0
+    dist = 0.0
+    cur = i0
+    while back < n - 1:
+        nxt = (cur - 1) % n
+        dist += float(np.linalg.norm(pts[cur] - pts[nxt]))
+        if dist > radius:
+            break
+        cur = nxt
+        back += 1
+
+    fwd = 0
+    dist = 0.0
+    cur = i0
+    while fwd < n - 1:
+        nxt = (cur + 1) % n
+        dist += float(np.linalg.norm(pts[cur] - pts[nxt]))
+        if dist > radius:
+            break
+        cur = nxt
+        fwd += 1
+
+    total = back + fwd + 1
+    if total >= n:
+        return np.arange(n, dtype=int)
+    start = (i0 - back) % n
+    return np.array([(start + t) % n for t in range(total)], dtype=int)
+
+
+def _plot_local_curve_piece_by_index(ax, dense, center_index, radius, color, lw,
+                                     zorder, capstyle="round"):
+    """Plot the single curve pass around ``center_index`` spanning ~``radius`` arc length.
+
+    Index-based counterpart to :func:`_plot_local_curve_piece`.  Selecting the
+    piece by curve parameter (rather than by spatial distance) is what makes
+    over/under gaps render correctly at self-crossings, where the component
+    passes through the crossing twice at nearly the same point.
+    """
+    pts = np.asarray(dense, float)
+    if pts.ndim != 2 or pts.shape[0] < 3:
+        return
+    run = _local_arclen_run(pts, center_index, radius)
+    if len(run) < 2:
+        return
+    seg = pts[run]
+    ax.plot(
+        seg[:, 0],
+        seg[:, 1],
+        color=color,
+        lw=lw,
+        solid_capstyle=capstyle,
+        solid_joinstyle="round",
+        zorder=zorder,
+        clip_on=False,
+    )
+
+
 def _disable_figure_clipping(fig):
     """Turn off artist clipping so SVG output avoids unnecessary clipPath masks."""
     try:
@@ -1250,11 +1434,10 @@ def render_diagram(
         for cidx, _ppos, is_over in info["marks"]:
             if is_over or cidx >= len(starts):
                 continue
-            cpt = dense[starts[cidx]]
-            _plot_local_curve_piece(
+            _plot_local_curve_piece_by_index(
                 ax,
                 dense,
-                cpt,
+                starts[cidx],
                 radius=gap,
                 color=gap_mask_color,
                 lw=max(float(lw) * 2.35, float(lw) + 2.0),
@@ -1267,16 +1450,52 @@ def render_diagram(
         for cidx, _ppos, is_over in info["marks"]:
             if (not is_over) or cidx >= len(starts):
                 continue
-            cpt = dense[starts[cidx]]
-            _plot_local_curve_piece(
+            _plot_local_curve_piece_by_index(
                 ax,
                 dense,
-                cpt,
+                starts[cidx],
                 radius=gap * 1.25,
                 color=info["color"],
                 lw=lw,
                 zorder=4,
             )
+
+    # Add the same style of over/under gap at *false* crossings -- the accidental
+    # strand overlaps some layouts (e.g. kamada) introduce away from true DT
+    # crossings.  These are not real crossings, so the over/under choice is
+    # arbitrary; we pick it deterministically (higher (curve, index) goes over)
+    # so each false crossing simply reads as a clean crossing.
+    dense_curves = [info["dense"] for info in curve_infos]
+    false_exclude_radius = 0.06 * span * sc
+    false_crossings = find_false_crossings_in_curves(
+        dense_curves, list(crossing_xy.values()), false_exclude_radius
+    )
+    for fc in false_crossings:
+        a = fc["a"]
+        b = fc["b"]
+        over, under = (a, b) if (a["curve"], a["index"]) >= (b["curve"], b["index"]) else (b, a)
+        _plot_local_curve_piece_by_index(
+            ax,
+            dense_curves[under["curve"]],
+            under["index"],
+            radius=gap,
+            color=gap_mask_color,
+            lw=max(float(lw) * 2.35, float(lw) + 2.0),
+            zorder=3,
+        )
+        _plot_local_curve_piece_by_index(
+            ax,
+            dense_curves[over["curve"]],
+            over["index"],
+            radius=gap * 1.25,
+            color=curve_infos[over["curve"]]["color"],
+            lw=lw,
+            zorder=4,
+        )
+    n_false_crossings = len(false_crossings)
+    # Expose the count so callers (file save, GUI log) can report it consistently
+    # with what is actually drawn.
+    setattr(ax, "_false_crossing_count", n_false_crossings)
 
     if arrows:
         for info in curve_infos:
@@ -1339,7 +1558,99 @@ def render_diagram(
         for entry in dt_label_entries:
             label_coords[entry["p"]] = np.asarray(entry["artist"].get_position(), float)
 
+    # Red warning about false crossings, shown on the live preview and saved into
+    # the image/SVG.  Anchored in axes fraction so it stays put regardless of the
+    # data limits and does not affect content framing.
+    if n_false_crossings > 0:
+        ax.text(
+            0.5,
+            0.985,
+            "Warning: %d false crossing(s) present (layout artifact, not real DT crossings)"
+            % n_false_crossings,
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            color="red",
+            fontsize=max(7.0, float(label_fontsize)),
+            fontweight="bold",
+            fontfamily=font_family,
+            zorder=20,
+            clip_on=False,
+        )
+
     return label_coords, crossing_xy
+
+def build_diagram_description(model, title=None, **info):
+    """Return ``(creator, title_text, description, stamp)`` describing the diagram.
+
+    Shared by the file metadata and by the visible caption drawn into the image,
+    so both carry identical text: the generating script/version plus essential
+    facts (component and crossing counts and the key drawing parameters).
+    """
+    try:
+        script_name = os.path.basename(os.path.abspath(__file__))
+    except Exception:
+        script_name = "draw_dt_original_labels.py"
+    n_comp = len(model.get("comp_positions", []))
+    n_cross = len(model.get("crossings", []))
+    creator = "%s (%s)" % (script_name, SCRIPT_VERSION)
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    parts = [
+        "Signed DT link diagram",
+        "components=%d" % n_comp,
+        "crossings=%d" % n_cross,
+    ]
+    for key in ("dt", "layout", "crossing_order", "y_direction", "rotate",
+                "negative_even", "gap_frac", "line_width", "label_fontsize",
+                "false_crossings"):
+        val = info.get(key)
+        if val is not None:
+            parts.append("%s=%s" % (key, val))
+    parts.append("script=%s" % creator)
+    parts.append("generated=%s" % stamp)
+    description = "; ".join(parts)
+    title_text = title or ("DT link diagram (%d components, %d crossings)"
+                           % (n_comp, n_cross))
+    return creator, title_text, description, stamp
+
+
+def build_diagram_metadata(out_path, model, title=None, **info):
+    """Assemble descriptive metadata embedded in the saved diagram.
+
+    Records the generating script and version plus essential facts about the
+    diagram (component and crossing counts and the key drawing parameters) so an
+    exported file -- an SVG in particular -- is self-documenting when reopened in
+    Illustrator/Inkscape or inspected as text.  The returned key set is tailored
+    to the output format so Matplotlib's SVG/PDF/raster backends accept it.
+    """
+    creator, title_text, description, stamp = build_diagram_description(
+        model, title=title, **info
+    )
+
+    ext = os.path.splitext(str(out_path))[1].lower()
+    if ext == ".svg":
+        return {
+            "Creator": creator,
+            "Title": title_text,
+            "Description": description,
+            "Date": stamp,
+        }
+    if ext == ".pdf":
+        return {
+            "Creator": creator,
+            "Title": title_text,
+            "Subject": description,
+            "Keywords": "DT code, knot, link diagram",
+        }
+    # PNG / other raster formats: the Agg backend stores arbitrary text chunks.
+    return {
+        "Software": creator,
+        "Title": title_text,
+        "Description": description,
+    }
+
 
 def draw(
     model,
@@ -1359,6 +1670,8 @@ def draw(
     show_labels=True,
     arrows=True,
     match_view=None,
+    dt_code=None,
+    layout=None,
 ):
     """Render and save a 2-D diagram.
 
@@ -1409,13 +1722,53 @@ def draw(
     _tighten_axis_to_content(ax, pad_frac=0.08)
     _disable_figure_clipping(fig)
     ensure_parent_dir(out_path)
+
+    n_false = int(getattr(ax, "_false_crossing_count", 0) or 0)
+    meta_info = dict(
+        gap_frac=gap_frac,
+        line_width=line_width,
+        label_fontsize=label_fontsize,
+    )
+    if dt_code:
+        # Collapse any line breaks/extra spaces from the GUI text box.
+        meta_info["dt"] = " ".join(str(dt_code).split())
+    if layout:
+        meta_info["layout"] = layout
+    if crossing_ids:
+        # The effective displayed crossing-ID order (odd-label order), which
+        # reflects a custom "crossing order" when one was supplied.
+        meta_info["crossing_order"] = " ".join(str(c) for c in crossing_ids)
+    if n_false > 0:
+        meta_info["false_crossings"] = n_false
+    metadata = build_diagram_metadata(out_path, model, title=title, **meta_info)
+
+    # Also display the metadata as visible text at the bottom of the saved image
+    # (so an SVG carries it both as file metadata and as an on-canvas caption).
+    _creator, _title_text, _description, _stamp = build_diagram_description(
+        model, title=title, **meta_info
+    )
+    ax.text(
+        0.5,
+        0.004,
+        _description,
+        transform=ax.transAxes,
+        ha="center",
+        va="bottom",
+        color="0.35",
+        fontsize=5.0,
+        fontfamily=DIAGRAM_FONT_FAMILY,
+        zorder=20,
+        clip_on=False,
+    )
+
     if match_view:
         # Reproduce the preview framing exactly, then save the whole figure so
         # the file matches what the live preview shows.
         apply_content_framing(ax, _axis_content_bounds(ax), aspect=aspect, zoom=zoom)
-        fig.savefig(out_path, dpi=dpi, pad_inches=0.0)
+        fig.savefig(out_path, dpi=dpi, pad_inches=0.0, metadata=metadata)
     else:
-        fig.savefig(out_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03)
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight", pad_inches=0.03,
+                    metadata=metadata)
     plt.close(fig)
     return label_coords, crossing_xy
 
@@ -2578,20 +2931,15 @@ def prepare_diagram(args, status_stream=None):
 
     false = audit_false_crossings(model, P, centers)
     used_layout = args.layout
-    if false > 0 and args.layout != "planar":
-        out.write(
-            "[warn] layout '%s' produced %d false crossing(s); "
-            "falling back to 'planar'.\n" % (args.layout, false)
-        )
-        P = compute_positions(G, "planar")
-        P = transform_positions(P, args.y_direction, args.rotate)
-        centers = crossing_centers(model, P)
-        false = audit_false_crossings(model, P, centers)
-        used_layout = "planar"
-
+    # The chosen layout is kept as-is even when it introduces false crossings
+    # (there is no automatic fallback to 'planar').  False crossings are drawn
+    # with over/under gaps and flagged in red on the diagram, so the requested
+    # layout -- including a "failed" kamada -- is preserved for inspection.
     if false > 0:
         out.write(
-            "[warn] %d false crossing(s) remain; inspect the drawing carefully.\n" % false
+            "[warn] layout '%s' has %d false crossing(s); kept as requested. "
+            "They are drawn with gaps and flagged in red on the diagram.\n"
+            % (args.layout, false)
         )
     else:
         out.write("[ok] audit: no false crossings.\n")
@@ -2739,6 +3087,8 @@ def run_pipeline(args, status_stream=None):
             figsize=args.figsize,
             show_labels=not args.hide_labels,
             arrows=not args.no_arrows,
+            dt_code=args.dt,
+            layout=args.layout,
         )
         out.write("[ok] wrote %s\n" % args.output)
 
@@ -2884,7 +3234,7 @@ def build_arg_parser():
         default="tutte",
         help=(
             "Layout engine. 'tutte' is default. If false crossings are detected, "
-            "the script falls back to 'planar'."
+            "the chosen layout is kept and the artifacts are highlighted."
         ),
     )
     ap.add_argument("--title", default=None, help="Optional title for the figure.")
@@ -3083,7 +3433,7 @@ def run_gui(initial_args):
         return 1
 
     apply_tk_window_icon(root, tk)
-    root.title("draw_dt_original_labelsV3_12")
+    root.title("draw_dt_original_labelsV3_14")
     root.geometry("1320x860")
     root.minsize(1050, 680)
 
@@ -3096,19 +3446,97 @@ def run_gui(initial_args):
     main.rowconfigure(0, weight=1)
 
     # ------------------------------------------------------------------
-    # Left side: live preview + save buttons + status log.
+    # Shared helpers and the file-path inputs.  These are defined before the
+    # left panel because the DT code box and the output-path fields now live at
+    # the top of the left column (they can be long), directly above the preview.
+    # ------------------------------------------------------------------
+    def show_arg_help(key):
+        title = key.replace("_", " ").strip().title()
+        message = GUI_HELP_TEXT.get(key, "No help text is available for this parameter.")
+        messagebox.showinfo(title, message)
+
+    def _mk_help_button(parent, key):
+        return tk.Button(
+            parent,
+            text="?",
+            width=2,
+            bg="#cfeeff",
+            activebackground="#aee3ff",
+            relief="raised",
+            command=lambda k=key: show_arg_help(k),
+        )
+
+    output_var = tk.StringVar(value=initial_args.output or "link_diagram.svg")
+    xyz_var = tk.StringVar(value=initial_args.xyz_output or "link_sphere.xyz")
+
+    def _derived_table_path():
+        """CSV table path derived from the output image path (same name, .csv)."""
+        base = output_var.get().strip() or "link_diagram.svg"
+        return os.path.splitext(base)[0] + ".csv"
+
+    def browse_output():
+        path = filedialog.asksaveasfilename(
+            title="Save diagram as",
+            defaultextension=".svg",
+            filetypes=[
+                ("SVG", "*.svg"),
+                ("PDF", "*.pdf"),
+                ("PNG", "*.png"),
+                ("All files", "*.*"),
+            ],
+        )
+        if path:
+            output_var.set(path)
+
+    def browse_xyz():
+        path = filedialog.asksaveasfilename(
+            title="Save spherical XYZ coordinates as",
+            defaultextension=".xyz",
+            filetypes=[("XYZ coordinate file", "*.xyz"), ("Text", "*.txt"), ("All files", "*.*")],
+        )
+        if path:
+            xyz_var.set(path)
+
+    # ------------------------------------------------------------------
+    # Left side: long inputs + live preview + save buttons + status log.
     # ------------------------------------------------------------------
     left = ttk.Frame(main)
     left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
     left.columnconfigure(0, weight=1)
-    left.rowconfigure(1, weight=1)
+    left.rowconfigure(2, weight=1)
+
+    # DT code and output-path fields.  Placed above the preview because these
+    # values can be very long.
+    io_frame = ttk.Frame(left)
+    io_frame.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+    io_frame.columnconfigure(1, weight=1)
+
+    ttk.Label(io_frame, text="Signed DT code").grid(row=0, column=0, sticky="nw", pady=3)
+    dt_text = tk.Text(io_frame, height=2, width=48, wrap="word")
+    dt_text.grid(row=0, column=1, sticky="ew", pady=3)
+    dt_text.insert("1.0", initial_args.dt if initial_args.dt else EXAMPLE_DT)
+    _mk_help_button(io_frame, "dt").grid(row=0, column=3, sticky="nw", padx=(5, 0), pady=3)
+
+    ttk.Label(io_frame, text="Output image").grid(row=1, column=0, sticky="w", pady=3)
+    ttk.Entry(io_frame, textvariable=output_var).grid(row=1, column=1, sticky="ew", pady=3)
+    ttk.Button(io_frame, text="Browse", command=browse_output).grid(
+        row=1, column=2, sticky="ew", padx=(4, 0), pady=3
+    )
+    _mk_help_button(io_frame, "output").grid(row=1, column=3, sticky="w", padx=(5, 0), pady=3)
+
+    ttk.Label(io_frame, text="Sphere XYZ").grid(row=2, column=0, sticky="w", pady=3)
+    ttk.Entry(io_frame, textvariable=xyz_var).grid(row=2, column=1, sticky="ew", pady=3)
+    ttk.Button(io_frame, text="Browse", command=browse_xyz).grid(
+        row=2, column=2, sticky="ew", padx=(4, 0), pady=3
+    )
+    _mk_help_button(io_frame, "xyz").grid(row=2, column=3, sticky="w", padx=(5, 0), pady=3)
 
     ttk.Label(left, text="Live preview", font=("TkDefaultFont", 11, "bold")).grid(
-        row=0, column=0, sticky="w"
+        row=1, column=0, sticky="w"
     )
 
     preview_frame = ttk.Frame(left, relief="sunken", padding=2)
-    preview_frame.grid(row=1, column=0, sticky="nsew", pady=(4, 6))
+    preview_frame.grid(row=2, column=0, sticky="nsew", pady=(4, 6))
     preview_frame.columnconfigure(0, weight=1)
     preview_frame.rowconfigure(0, weight=1)
 
@@ -3128,17 +3556,17 @@ def run_gui(initial_args):
     canvas_widget.grid(row=0, column=0, sticky="nsew")
 
     save_bar = ttk.Frame(left)
-    save_bar.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+    save_bar.grid(row=3, column=0, sticky="ew", pady=(0, 4))
     for j in range(7):
         save_bar.columnconfigure(j, weight=1)
 
     preview_control_bar = ttk.Frame(left)
-    preview_control_bar.grid(row=3, column=0, sticky="ew", pady=(0, 6))
+    preview_control_bar.grid(row=4, column=0, sticky="ew", pady=(0, 6))
     for j in range(6):
         preview_control_bar.columnconfigure(j, weight=1)
 
     log_text = tk.Text(left, height=8, state="disabled", wrap="word")
-    log_text.grid(row=4, column=0, sticky="nsew")
+    log_text.grid(row=5, column=0, sticky="nsew")
 
     def set_log(text):
         log_text.configure(state="normal")
@@ -3173,6 +3601,36 @@ def run_gui(initial_args):
 
     settings.bind("<Configure>", _settings_configure)
     settings_canvas.bind("<Configure>", _canvas_configure)
+
+    # Mouse-wheel scrolling for the right parameter panel.  Tk delivers wheel
+    # events as <MouseWheel> (Windows/macOS, via event.delta) or <Button-4>/
+    # <Button-5> (X11/Linux).  We grab the wheel only while the pointer is over
+    # the panel, then release it, so it does not fight the 2D preview canvas.
+    def _on_settings_mousewheel(event):
+        if getattr(event, "num", None) == 4:
+            settings_canvas.yview_scroll(-1, "units")
+        elif getattr(event, "num", None) == 5:
+            settings_canvas.yview_scroll(1, "units")
+        else:
+            delta = getattr(event, "delta", 0)
+            if delta:
+                settings_canvas.yview_scroll(-1 if delta > 0 else 1, "units")
+        return "break"
+
+    def _bind_settings_mousewheel(_event=None):
+        settings_canvas.bind_all("<MouseWheel>", _on_settings_mousewheel)
+        settings_canvas.bind_all("<Button-4>", _on_settings_mousewheel)
+        settings_canvas.bind_all("<Button-5>", _on_settings_mousewheel)
+
+    def _unbind_settings_mousewheel(_event=None):
+        settings_canvas.unbind_all("<MouseWheel>")
+        settings_canvas.unbind_all("<Button-4>")
+        settings_canvas.unbind_all("<Button-5>")
+
+    for _w in (settings_canvas, settings, settings_scroll):
+        _w.bind("<Enter>", _bind_settings_mousewheel)
+        _w.bind("<Leave>", _unbind_settings_mousewheel)
+
     settings.columnconfigure(1, weight=1)
     settings.columnconfigure(2, weight=0)
     settings.columnconfigure(3, weight=0)
@@ -3181,85 +3639,15 @@ def run_gui(initial_args):
         settings, text="Parameters", font=("TkDefaultFont", 11, "bold")
     ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
 
-    def show_arg_help(key):
-        title = key.replace("_", " ").strip().title()
-        message = GUI_HELP_TEXT.get(key, "No help text is available for this parameter.")
-        messagebox.showinfo(title, message)
-
     def add_help_button(grid_row, key):
-        btn = tk.Button(
-            settings,
-            text="?",
-            width=2,
-            bg="#cfeeff",
-            activebackground="#aee3ff",
-            relief="raised",
-            command=lambda k=key: show_arg_help(k),
-        )
+        btn = _mk_help_button(settings, key)
         btn.grid(row=grid_row, column=3, sticky="w", padx=(5, 0), pady=2)
         return btn
 
+    # The Signed DT code box and the output-path fields now live at the top of
+    # the left column (above the preview), so the parameter panel starts with the
+    # drawing options.
     row = 1
-    ttk.Label(settings, text="Signed DT code").grid(row=row, column=0, sticky="nw", pady=3)
-    dt_text = tk.Text(settings, height=6, width=54, wrap="word")
-    dt_text.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
-    dt_text.insert("1.0", initial_args.dt if initial_args.dt else EXAMPLE_DT)
-    add_help_button(row, "dt")
-    row += 1
-
-    output_var = tk.StringVar(value=initial_args.output or "link_diagram.svg")
-    table_var = tk.StringVar(value=initial_args.table or "")
-    xyz_var = tk.StringVar(value=initial_args.xyz_output or "link_sphere.xyz")
-
-    def browse_output():
-        path = filedialog.asksaveasfilename(
-            title="Save diagram as",
-            defaultextension=".svg",
-            filetypes=[
-                ("SVG", "*.svg"),
-                ("PDF", "*.pdf"),
-                ("PNG", "*.png"),
-                ("All files", "*.*"),
-            ],
-        )
-        if path:
-            output_var.set(path)
-
-    def browse_table():
-        path = filedialog.asksaveasfilename(
-            title="Save CSV table as",
-            defaultextension=".csv",
-            filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
-        )
-        if path:
-            table_var.set(path)
-
-    def browse_xyz():
-        path = filedialog.asksaveasfilename(
-            title="Save spherical XYZ coordinates as",
-            defaultextension=".xyz",
-            filetypes=[("XYZ coordinate file", "*.xyz"), ("Text", "*.txt"), ("All files", "*.*")],
-        )
-        if path:
-            xyz_var.set(path)
-
-    ttk.Label(settings, text="Output image").grid(row=row, column=0, sticky="w", pady=3)
-    ttk.Entry(settings, textvariable=output_var).grid(row=row, column=1, sticky="ew", pady=3)
-    ttk.Button(settings, text="Browse", command=browse_output).grid(row=row, column=2, sticky="ew", pady=3)
-    add_help_button(row, "output")
-    row += 1
-
-    ttk.Label(settings, text="CSV table").grid(row=row, column=0, sticky="w", pady=3)
-    ttk.Entry(settings, textvariable=table_var).grid(row=row, column=1, sticky="ew", pady=3)
-    ttk.Button(settings, text="Browse", command=browse_table).grid(row=row, column=2, sticky="ew", pady=3)
-    add_help_button(row, "table")
-    row += 1
-
-    ttk.Label(settings, text="Sphere XYZ").grid(row=row, column=0, sticky="w", pady=3)
-    ttk.Entry(settings, textvariable=xyz_var).grid(row=row, column=1, sticky="ew", pady=3)
-    ttk.Button(settings, text="Browse", command=browse_xyz).grid(row=row, column=2, sticky="ew", pady=3)
-    add_help_button(row, "xyz")
-    row += 1
 
     neg_var = tk.StringVar(value=initial_args.negative_even)
     layout_var = tk.StringVar(value=initial_args.layout)
@@ -3341,48 +3729,6 @@ def run_gui(initial_args):
         row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6)
     )
     row += 1
-    ttk.Label(settings, text="Sphere XYZ", font=("TkDefaultFont", 10, "bold")).grid(
-        row=row, column=0, columnspan=4, sticky="w", pady=(0, 4)
-    )
-    row += 1
-    ttk.Label(settings, text="sphere layout").grid(row=row, column=0, sticky="w", pady=3)
-    ttk.Combobox(
-        settings, textvariable=sphere_layout_var,
-        values=["spherical-kamada", "stereographic"],
-        width=18, state="readonly"
-    ).grid(row=row, column=1, sticky="w", pady=3)
-    add_help_button(row, "sphere_layout")
-    row += 1
-    ttk.Checkbutton(
-        settings,
-        text="direct connecting",
-        variable=direct_connecting_var,
-    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
-    add_help_button(row, "direct_connecting")
-    row += 1
-    add_entry("sphere radius", sphere_radius_var, help_key="sphere_radius")
-    add_entry("sphere extent", sphere_extent_var, help_key="sphere_extent")
-    add_entry("crossing offset", sphere_offset_var, help_key="crossing_offset")
-    add_entry("crossing angle deg", sphere_angle_var, help_key="sphere_crossing_angle")
-    add_entry("bump fraction", sphere_bump_var, help_key="sphere_bump_frac")
-    add_entry("XYZ point spacing", xyz_spacing_var, help_key="xyz_spacing")
-    ttk.Checkbutton(
-        settings,
-        text="final smooth 3D curve",
-        variable=xyz_final_smooth_var,
-    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
-    add_help_button(row, "xyz_final_smooth")
-    row += 1
-    add_entry("smooth window", xyz_smooth_window_var, help_key="xyz_smooth_window")
-    add_entry("smooth passes", xyz_smooth_passes_var, help_key="xyz_smooth_passes")
-    add_entry("XYZ decimals", xyz_decimals_var, help_key="xyz_decimals")
-    ttk.Checkbutton(
-        settings,
-        text="repeat first point to close each component",
-        variable=xyz_close_var,
-    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
-    add_help_button(row, "xyz_close_components")
-    row += 1
 
     ttk.Label(settings, text="title").grid(row=row, column=0, sticky="w", pady=3)
     ttk.Entry(settings, textvariable=title_var).grid(
@@ -3447,9 +3793,53 @@ def run_gui(initial_args):
     ).grid(row=row, column=1, columnspan=2, sticky="w")
     row += 1
 
-    ttk.Button(settings, text="Refresh preview", command=lambda: update_preview()).grid(
-        row=row, column=1, sticky="ew", pady=(10, 4)
+    # Sphere XYZ parameters live at the bottom of the panel.
+    ttk.Separator(settings, orient="horizontal").grid(
+        row=row, column=0, columnspan=4, sticky="ew", pady=(8, 6)
     )
+    row += 1
+    ttk.Label(settings, text="Sphere XYZ", font=("TkDefaultFont", 10, "bold")).grid(
+        row=row, column=0, columnspan=4, sticky="w", pady=(0, 4)
+    )
+    row += 1
+    ttk.Label(settings, text="sphere layout").grid(row=row, column=0, sticky="w", pady=3)
+    ttk.Combobox(
+        settings, textvariable=sphere_layout_var,
+        values=["spherical-kamada", "stereographic"],
+        width=18, state="readonly"
+    ).grid(row=row, column=1, sticky="w", pady=3)
+    add_help_button(row, "sphere_layout")
+    row += 1
+    ttk.Checkbutton(
+        settings,
+        text="direct connecting",
+        variable=direct_connecting_var,
+    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "direct_connecting")
+    row += 1
+    add_entry("sphere radius", sphere_radius_var, help_key="sphere_radius")
+    add_entry("sphere extent", sphere_extent_var, help_key="sphere_extent")
+    add_entry("crossing offset", sphere_offset_var, help_key="crossing_offset")
+    add_entry("crossing angle deg", sphere_angle_var, help_key="sphere_crossing_angle")
+    add_entry("bump fraction", sphere_bump_var, help_key="sphere_bump_frac")
+    add_entry("XYZ point spacing", xyz_spacing_var, help_key="xyz_spacing")
+    ttk.Checkbutton(
+        settings,
+        text="final smooth 3D curve",
+        variable=xyz_final_smooth_var,
+    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "xyz_final_smooth")
+    row += 1
+    add_entry("smooth window", xyz_smooth_window_var, help_key="xyz_smooth_window")
+    add_entry("smooth passes", xyz_smooth_passes_var, help_key="xyz_smooth_passes")
+    add_entry("XYZ decimals", xyz_decimals_var, help_key="xyz_decimals")
+    ttk.Checkbutton(
+        settings,
+        text="repeat first point to close each component",
+        variable=xyz_close_var,
+    ).grid(row=row, column=1, columnspan=2, sticky="w", pady=2)
+    add_help_button(row, "xyz_close_components")
+    row += 1
 
     latest = {
         "args": None,
@@ -3541,7 +3931,7 @@ def run_gui(initial_args):
         return argparse.Namespace(
             dt=dt,
             output=output_var.get().strip() or "link_diagram.svg",
-            table=table_var.get().strip() or None,
+            table=None,
             negative_even=neg_var.get(),
             crossing_order=order_text.get("1.0", "end").strip() or None,
             crossing_map=map_text.get("1.0", "end").strip() or None,
@@ -3638,13 +4028,9 @@ def run_gui(initial_args):
         return path
 
     def _ask_table_path():
-        path = table_var.get().strip()
-        if not path:
-            browse_table()
-            path = table_var.get().strip()
-        if not path:
-            raise ValueError("No CSV table path was selected.")
-        return path
+        # The CSV table now always shares the output image's name/directory,
+        # differing only by the .csv extension.
+        return _derived_table_path()
 
     def _ask_xyz_path():
         path = xyz_var.get().strip()
@@ -3695,6 +4081,8 @@ def run_gui(initial_args):
                 show_labels=not ns.hide_labels,
                 arrows=not ns.no_arrows,
                 match_view=_current_match_view(),
+                dt_code=ns.dt,
+                layout=ns.layout,
             )
             set_log(buf.getvalue() + "[ok] wrote %s\n" % ns.output)
             messagebox.showinfo("Saved", "Wrote image:\n%s" % ns.output)
@@ -3783,6 +4171,8 @@ def run_gui(initial_args):
                 show_labels=not ns.hide_labels,
                 arrows=not ns.no_arrows,
                 match_view=_current_match_view(),
+                dt_code=ns.dt,
+                layout=ns.layout,
             )
             write_table(
                 state["model"],
@@ -3915,7 +4305,6 @@ def run_gui(initial_args):
 
     watched_vars = [
         output_var,
-        table_var,
         xyz_var,
         neg_var,
         layout_var,

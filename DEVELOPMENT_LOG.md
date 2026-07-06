@@ -13,7 +13,7 @@ Files
 -----
     strand_passage_guiV3_8.py         (V3.8) interactive GUI + --nongui + --demo
     link_engine_v3_8.py               (V3.8) passage / DT-choice / SnapPy engine
-    draw_dt_original_labelsV3_12.py   (V3.12) drawing + model layer
+    draw_dt_original_labelsV3_14.py   (V3.14) drawing + model layer
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
     find_link_in_snappy.py            standalone SnapPy database search utility
@@ -59,15 +59,44 @@ Utility update (SnapPy database search)
     for hyperbolic links.  Output is a TSV table.
 
 
+Drawing helper V3.14 (false-crossing visualization)
+---------------------------------------------------
+  * draw_dt_original_labelsV3_14.py keeps the requested 2-D layout even when it
+    introduces false crossings; it no longer silently falls back to `planar`.
+  * False crossings are drawn with the same local over/under gap style as true
+    crossings, with deterministic but arbitrary over/under choice because they
+    are layout artifacts rather than real DT crossings.
+  * Live previews and saved images/SVGs show a red false-crossing warning.
+  * Saved diagrams now also draw the generator metadata as a visible bottom
+    caption, in addition to embedding it in file metadata.
+  * link_engine_v3_8.py now preserves the helper's requested layout so
+    strand_passage_guiV3_8.py matches V3.14 rendering behavior.
+
+
+Drawing helper V3.13 (self-crossing gaps + metadata)
+----------------------------------------------------
+  * draw_dt_original_labelsV3_13.py fixes over/under gap rendering at
+    self-crossings, e.g. the trefoil `DT: [(4,6,2)]`, by selecting local
+    crossing pieces along the curve parameter rather than by spatial radius.
+  * Saved SVG/PDF/PNG diagrams now embed generator metadata: script name,
+    helper version, component/crossing counts, key drawing parameters, and a
+    timestamp.
+  * The standalone helper GUI reduces the DT-code box to two lines, removes the
+    redundant refresh button and explicit CSV table field, and improves
+    mouse-wheel scrolling over the right parameter panel.
+  * The strand-passage GUI/engine imported V3.13 directly before the later
+    V3.14 helper bump.
+
+
 What is new in V3.8 (overview SVG text-box sizing)
 --------------------------------------------------
   * --nongui overview SVGs now apply Arial before the figure is measured and
     drawn, instead of only immediately before saving the SVG.
   * The overview card/header geometry is slightly roomier, and the arrow-label,
     footer, DT-label, and crossing-ID text boxes/circles use larger padding.
-  * draw_dt_original_labelsV3_12.py makes the same font/padding adjustment for
-    standalone helper SVG/PDF exports, so the live helper preview and final SVG
-    are less likely to diverge in Illustrator.
+  * draw_dt_original_labelsV3_14.py includes the same font/padding adjustment
+    for standalone helper SVG/PDF exports, so the live helper preview and final
+    SVG are less likely to diverge in Illustrator.
   * Font sizes still come from the GUI/CLI values: `DT label font` /
     `--font-size` and `crossing ID font` / `--crossing-id-font-size`.
   * This keeps text editable while reducing the mismatch where Illustrator could

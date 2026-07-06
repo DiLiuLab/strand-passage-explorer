@@ -15,6 +15,7 @@ strand_passage_results*.svg
 strand_passage_step*.png
 strand_passage_chain*.png
 chain*.png
+*.xyz
 
 # Editor / misc
 .idea/

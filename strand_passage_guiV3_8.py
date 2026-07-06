@@ -12,7 +12,7 @@ What is new in V3.8
   overview text is set to Arial before figure construction, card/footer panels
   are slightly roomier, and text-background boxes have larger padding so the
   final SVG better matches the Matplotlib-rendered view in Illustrator.
-* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py``; its editable
+* Drawing/model layer is now ``draw_dt_original_labelsV3_14.py``; its editable
   SVG text boxes/circles also use Arial and larger padding by default.
 
 What is new in V3.7
@@ -49,7 +49,7 @@ What is new in V3.4
 * Optional Tk window/task-menu icon loaded from ``assets/strand_passage_icon.png``
   when present.  Missing or unsupported icon assets are ignored, so the scripts
   still run from a plain source checkout.
-* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py`` (via
+* Drawing/model layer is now ``draw_dt_original_labelsV3_14.py`` (via
   ``link_engine_v3_8.py``).
 
 What is new in V3.3
@@ -66,10 +66,10 @@ What is new in V3.3
 
 What is new in V3.2
 -------------------
-* Drawing/model layer is now ``draw_dt_original_labelsV3_12.py`` (via
+* Drawing/model layer is now ``draw_dt_original_labelsV3_14.py`` (via
   ``link_engine_v3_8.py``), and 2-D links are drawn with that helper's own
-  DEFAULT settings (default layout, top-to-bottom orientation, false-crossing
-  audit with a planar fallback).
+  DEFAULT settings (default layout, top-to-bottom orientation, and V3.14
+  false-crossing visualization).
 * DT-code choice rule, applied everywhere (GUI and ``--nongui`` spreadsheet):
   after a passage, if the *direct after-passage DT code* has MORE crossings than
   the SnapPy ``simplify('global')`` code, the SnapPy-simplified code is used;
@@ -126,7 +126,7 @@ import numpy as np
 # backend so Sage/macOS never fails before the GUI's own backend fallback runs.
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-import draw_dt_original_labelsV3_12 as D          # noqa: E402
+import draw_dt_original_labelsV3_14 as D          # noqa: E402
 import link_engine_v3_8 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
