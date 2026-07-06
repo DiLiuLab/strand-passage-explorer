@@ -1,4 +1,4 @@
-# Strand-Passage Explorer
+# DT Strand-Passage Explorer
 
 Strand-Passage Explorer is a research tool for studying **strand passages**
 (crossing changes) on knots and links given by a signed
