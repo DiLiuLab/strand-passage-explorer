@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-strand_passage_guiV3_6.py  (V3.6)
+strand_passage_guiV3_7.py  (V3.7)
 =================================
 
 Interactive strand-passage explorer with component-colour preservation.
+
+What is new in V3.7
+-------------------
+* ``--nongui`` overview SVGs now keep text as editable SVG text instead of
+  expanding labels to outline paths.  Overview text artists are forced to Arial
+  before export to reduce Adobe Illustrator font-substitution warnings while
+  keeping labels selectable/editable.
 
 What is new in V3.6
 -------------------
@@ -34,7 +41,7 @@ What is new in V3.4
   when present.  Missing or unsupported icon assets are ignored, so the scripts
   still run from a plain source checkout.
 * Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_6.py``).
+  ``link_engine_v3_7.py``).
 
 What is new in V3.3
 -------------------
@@ -51,7 +58,7 @@ What is new in V3.3
 What is new in V3.2
 -------------------
 * Drawing/model layer is now ``draw_dt_original_labelsV3_11.py`` (via
-  ``link_engine_v3_6.py``), and 2-D links are drawn with that helper's own
+  ``link_engine_v3_7.py``), and 2-D links are drawn with that helper's own
   DEFAULT settings (default layout, top-to-bottom orientation, false-crossing
   audit with a planar fallback).
 * DT-code choice rule, applied everywhere (GUI and ``--nongui`` spreadsheet):
@@ -80,17 +87,17 @@ What is new in V3.2
   operation order; topologically identical structures are merged into one card.
 
 Non-interactive spreadsheet (behaves like the old strand_pass_sage.py):
-    sage -python strand_passage_guiV3_6.py --nongui \
+    sage -python strand_passage_guiV3_7.py --nongui \
         --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
         --out strand_passage_results.xlsx
 
 Interactive run:
-    sage -python strand_passage_guiV3_6.py                 # SnapPy enabled
-    sage -python strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]"
-    python3 strand_passage_guiV3_6.py --gui-backend agg    # if TkAgg won't load
+    sage -python strand_passage_guiV3_7.py                 # SnapPy enabled
+    sage -python strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]"
+    python3 strand_passage_guiV3_7.py --gui-backend agg    # if TkAgg won't load
 
 Headless cascade figure (no display needed):
-    python3 strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+    python3 strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 """
 
 from __future__ import annotations
@@ -111,12 +118,13 @@ import numpy as np
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import draw_dt_original_labelsV3_11 as D          # noqa: E402
-import link_engine_v3_6 as E                       # noqa: E402
+import link_engine_v3_7 as E                       # noqa: E402
 
 TAB10_NAMES = ["blue", "orange", "green", "red", "purple",
                "brown", "pink", "gray", "olive", "cyan"]
 DEFAULT_DT = "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]"
-VERSION = "3.6"
+VERSION = "3.7"
+OVERVIEW_FONT_FAMILY = "Arial"
 NONGUI_SECOND_PASS_CRITERION = (
     "first-step new_components > 2 and DT_code_chosen is available")
 DEFAULT_BACKTRACK_ROUNDS = getattr(E, "DEFAULT_BACKTRACK_ROUNDS", 200)
@@ -219,7 +227,7 @@ def warn_if_no_sage():
         "[warning] Not running under Sage: Jones polynomials (and the SnapPy "
         "invariant colour-matching that relies on them) cannot be computed. "
         "For full functionality run this with 'sage -python "
-        "strand_passage_guiV3_6.py ...'.\n")
+        "strand_passage_guiV3_7.py ...'.\n")
 
 
 # --------------------------------------------------------------------------- #
@@ -1187,15 +1195,26 @@ def render_overview_svg(nodes, edges, out_path, negative_even="over",
                  color="#374151", zorder=4, wrap=True,
                  bbox=dict(boxstyle="round,pad=0.4", fc="#f3f4f6", ec="#d1d5db"))
 
-    # Illustrator-friendly SVG: outline every glyph (so the "Font Problems"
-    # dialog about DejaVu/Computer Modern/etc. never appears) and turn off
-    # artist clipping (so "Clipping will be lost on roundtrip to Tiny" is gone).
+    # Illustrator-friendly SVG: keep labels editable as real SVG <text> while
+    # using Arial throughout the overview to avoid most font-substitution
+    # warnings.  Artist clipping stays disabled so Illustrator does not warn
+    # about clipping loss on SVG roundtrip.
     for artist in fig.findobj():
         try:
             artist.set_clip_on(False)
         except Exception:  # noqa: BLE001
             pass
-    with mpl.rc_context({"svg.fonttype": "path"}):
+        try:
+            if isinstance(artist, mpl.text.Text):
+                artist.set_fontfamily(OVERVIEW_FONT_FAMILY)
+        except Exception:  # noqa: BLE001
+            pass
+    with mpl.rc_context({
+            "svg.fonttype": "none",
+            "font.family": OVERVIEW_FONT_FAMILY,
+            "font.sans-serif": [OVERVIEW_FONT_FAMILY],
+            "font.monospace": [OVERVIEW_FONT_FAMILY],
+    }):
         fig.savefig(out_path, format="svg", facecolor="white")
     plt.close(fig)
 
@@ -1891,7 +1910,7 @@ def run_gui(dt_string=None, negative_even="over", use_snappy_global=True,
 # --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser(
-        prog="strand_passage_guiV3_6.py",
+        prog="strand_passage_guiV3_7.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Strand passage explorer V%s\n"
@@ -1908,17 +1927,17 @@ def main():
             % VERSION),
         epilog=(
             "examples:\n"
-            "  sage -python strand_passage_guiV3_6.py\n"
-            "  sage -python strand_passage_guiV3_6.py --dt \"DT: [(4,6,2)]\"\n"
-            "  sage -python strand_passage_guiV3_6.py --backtrack "
+            "  sage -python strand_passage_guiV3_7.py\n"
+            "  sage -python strand_passage_guiV3_7.py --dt \"DT: [(4,6,2)]\"\n"
+            "  sage -python strand_passage_guiV3_7.py --backtrack "
             "--backtrack-rounds 50 --backtrack-steps 25\n"
-            "  sage -python strand_passage_guiV3_6.py --nongui \\\n"
+            "  sage -python strand_passage_guiV3_7.py --nongui \\\n"
             "       --dt \"DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),"
             "(-20,-6,-18,-4)]\" \\\n"
             "       --out results.xlsx --backtrack --backtrack-rounds 50\n"
-            "  python3 strand_passage_guiV3_6.py --dt \"DT: [(4,6,2)]\" "
+            "  python3 strand_passage_guiV3_7.py --dt \"DT: [(4,6,2)]\" "
             "--demo 2 1 --out chain.png\n"
-            "  python3 strand_passage_guiV3_6.py --gui-backend agg   "
+            "  python3 strand_passage_guiV3_7.py --gui-backend agg   "
             "# if TkAgg won't load\n"))
     ap.add_argument("--dt", default=None, metavar="STR",
                     help="signed DT code string, e.g. \"DT: [(4,6,2)]\" "
@@ -1949,10 +1968,10 @@ def main():
                          "do not combine with --crossing-order")
     ap.add_argument("--backtrack", action="store_true",
                     help="(kept for compatibility; backtrack is ON by default "
-                         "in V3.6 -- use --no-backtrack to disable)")
+                         "in V3.7 -- use --no-backtrack to disable)")
     ap.add_argument("--no-backtrack", action="store_true",
                     help="disable backtrack-assisted SnapPy simplification "
-                         "(V3.6 enables it by default)")
+                         "(V3.7 enables it by default)")
     ap.add_argument("--backtrack-rounds", type=int, metavar="N",
                     default=DEFAULT_BACKTRACK_ROUNDS,
                     help="backtrack rounds (default %d)"
@@ -1964,7 +1983,7 @@ def main():
     args = ap.parse_args()
 
     use_snappy_global = not args.no_snappy_global
-    backtrack_enabled = not args.no_backtrack           # ON by default (V3.6)
+    backtrack_enabled = not args.no_backtrack           # ON by default (V3.7)
     backtrack_rounds = args.backtrack_rounds if backtrack_enabled else 0
     backtrack_steps = args.backtrack_steps
 
@@ -1984,7 +2003,7 @@ def main():
 
     if args.demo is not None:
         dt = args.dt or "DT: [(4,6,2)]"
-        out = args.out or "strand_passage_chain_v3_6.png"
+        out = args.out or "strand_passage_chain_v3_7.png"
         render_chain(dt, args.demo, out, negative_even=args.negative_even,
                      use_snappy_global=use_snappy_global,
                      backtrack_rounds=backtrack_rounds,

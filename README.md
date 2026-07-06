@@ -26,8 +26,8 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ## Repository Layout
 
 ```text
-strand_passage_guiV3_6.py        Main entry point: GUI, --nongui, and --demo
-link_engine_v3_6.py              Diagram engine and SnapPy bridge
+strand_passage_guiV3_7.py        Main entry point: GUI, --nongui, and --demo
+link_engine_v3_7.py              Diagram engine and SnapPy bridge
 draw_dt_original_labelsV3_11.py  DT parser, layout, renderer, and standalone GUI
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
@@ -41,7 +41,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV3_6 -> link_engine_v3_6 -> draw_dt_original_labelsV3_11
+strand_passage_guiV3_7 -> link_engine_v3_7 -> draw_dt_original_labelsV3_11
 ```
 
 ## Install
@@ -65,7 +65,7 @@ python3 -m pip install -r requirements.txt
 For full functionality, run with **Sage + SnapPy**:
 
 ```bash
-sage -python strand_passage_guiV3_6.py --help
+sage -python strand_passage_guiV3_7.py --help
 ```
 
 SnapPy is intentionally not pinned in `requirements.txt`, because this project
@@ -76,20 +76,20 @@ is intended to use the SnapPy/Sage installation on the research machine.
 Interactive GUI:
 
 ```bash
-sage -python strand_passage_guiV3_6.py
-sage -python strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]"
+sage -python strand_passage_guiV3_7.py
+sage -python strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]"
 ```
 
 If the TkAgg backend is not available:
 
 ```bash
-python3 strand_passage_guiV3_6.py --gui-backend agg
+python3 strand_passage_guiV3_7.py --gui-backend agg
 ```
 
 Batch spreadsheet and overview SVG:
 
 ```bash
-sage -python strand_passage_guiV3_6.py --nongui \
+sage -python strand_passage_guiV3_7.py --nongui \
   --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
   --out strand_passage_results.xlsx
 ```
@@ -120,7 +120,7 @@ Custom displayed crossing IDs use the same syntax as
 `draw_dt_original_labelsV3_11.py`:
 
 ```bash
-sage -python strand_passage_guiV3_6.py \
+sage -python strand_passage_guiV3_7.py \
   --dt "DT: [(4,6,2)]" \
   --crossing-order "c1 c3 c2"
 ```
@@ -135,7 +135,7 @@ Spreadsheet columns to know:
 
 - `DT_code_chosen` is the visible DT code used for the drawn structure and for
   any next passage step.
-- In V3.6, the second pass is run once for each merged first-step structure,
+- The second pass is run once for each merged first-step structure,
   not once for every raw first-step crossing. A first-step result is continued
   when `new_components > 2` and it has a usable `DT_code_chosen`; the CLI prints
   this criterion and the resulting continuation counts. Second-pass sheets are
@@ -162,7 +162,7 @@ Spreadsheet columns to know:
 Headless cascade figure:
 
 ```bash
-python3 strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+python3 strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 ```
 
 Standalone DT comparison utility:
@@ -219,7 +219,7 @@ The launcher uses `sage -python` when Sage is available, and falls back to
 To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
-chmod +x strand_passage_guiV3_6.py
+chmod +x strand_passage_guiV3_7.py
 chmod +x draw_dt_original_labelsV3_11.py
 chmod +x check_two_dt.py
 chmod +x find_link_in_snappy.py
@@ -228,13 +228,13 @@ chmod +x find_link_in_snappy.py
 Then they can be run as:
 
 ```bash
-./strand_passage_guiV3_6.py --gui-backend agg
+./strand_passage_guiV3_7.py --gui-backend agg
 ```
 
 For SnapPy/Jones functionality, prefer:
 
 ```bash
-sage -python ./strand_passage_guiV3_6.py
+sage -python ./strand_passage_guiV3_7.py
 ```
 
 ## Notes
@@ -246,6 +246,8 @@ sage -python ./strand_passage_guiV3_6.py
   Use `--negative-even under` for the opposite convention.
 - Generated outputs such as `*.xlsx`, `*_overview*.svg`, and cascade PNGs are
   ignored by Git.
+- The `--nongui` overview SVG keeps labels and captions as editable text using
+  Arial, so text can be selected and edited in Illustrator/Inkscape.
 - The optional icon lives in `assets/`. If it is missing, the GUI scripts still
   run normally.
 

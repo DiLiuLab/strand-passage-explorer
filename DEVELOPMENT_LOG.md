@@ -11,8 +11,8 @@ so passages chain (and may branch) across as many windows as you like.
 
 Files
 -----
-    strand_passage_guiV3_6.py         (V3.6) interactive GUI + --nongui + --demo
-    link_engine_v3_6.py               (V3.6) passage / DT-choice / SnapPy engine
+    strand_passage_guiV3_7.py         (V3.7) interactive GUI + --nongui + --demo
+    link_engine_v3_7.py               (V3.7) passage / DT-choice / SnapPy engine
     draw_dt_original_labelsV3_11.py   (V3.11) drawing + model layer
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
@@ -29,25 +29,25 @@ Files
 
 Run
 ---
-    sage -python strand_passage_guiV3_6.py                     # SnapPy enabled
-    sage -python strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]"
-    python3 strand_passage_guiV3_6.py --gui-backend agg        # if TkAgg won't load
+    sage -python strand_passage_guiV3_7.py                     # SnapPy enabled
+    sage -python strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]"
+    python3 strand_passage_guiV3_7.py --gui-backend agg        # if TkAgg won't load
     ./bin/strand-passage --help                                # launcher
 
 Backtrack-assisted simplification (ON by default: 200 rounds, 30 steps):
-    sage -python strand_passage_guiV3_6.py                     # backtrack ON
-    sage -python strand_passage_guiV3_6.py --backtrack-rounds 400
-    sage -python strand_passage_guiV3_6.py --no-backtrack      # turn it OFF
+    sage -python strand_passage_guiV3_7.py                     # backtrack ON
+    sage -python strand_passage_guiV3_7.py --backtrack-rounds 400
+    sage -python strand_passage_guiV3_7.py --no-backtrack      # turn it OFF
     (in the GUI, the "Backtrack simplify" checkbox + rounds/steps fields start
      ON at 200/30 and can be toggled live between clicks.)
 
 Non-interactive two-pass spreadsheet:
-    sage -python strand_passage_guiV3_6.py --nongui \
+    sage -python strand_passage_guiV3_7.py --nongui \
         --dt "DT: [(-8,-12,16),(-24,-22,-28,-26),(-10,-14,-2),(-20,-6,-18,-4)]" \
         --out strand_passage_results.xlsx        # backtrack ON by default
 
 Headless cascade figure (no display needed):
-    python3 strand_passage_guiV3_6.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
+    python3 strand_passage_guiV3_7.py --dt "DT: [(4,6,2)]" --demo 2 1 --out chain.png
 
 
 Utility update (SnapPy database search)
@@ -57,6 +57,14 @@ Utility update (SnapPy database search)
   * Search order is extended alphabetic DT with flips, exact numeric DT,
     optional loose numeric DT, then meridian-preserving exterior identification
     for hyperbolic links.  Output is a TSV table.
+
+
+What is new in V3.7 (editable overview SVG text)
+------------------------------------------------
+  * --nongui overview SVGs now keep all labels and captions as editable SVG text
+    instead of expanding glyphs to outline paths.
+  * Overview text is forced to Arial before export to reduce Adobe Illustrator
+    font-substitution warnings while keeping the text selectable/editable.
 
 
 What is new in V3.6 (continuation rule + run metadata)
