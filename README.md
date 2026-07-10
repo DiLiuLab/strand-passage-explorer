@@ -29,7 +29,7 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ```text
 strand_passage_guiV4_0.py        Main entry point: GUI, --nongui, and --demo
 link_engine_v4_0.py              Diagram engine and SnapPy bridge
-draw_dt_original_labelsV4_5.py   DT parser, layout, renderer, and standalone GUI
+draw_dt_original_labelsV5_3.py   DT parser, layout, renderer, and standalone GUI
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
 score_diagramV2_0.py             Generate, deduplicate, score, and rank diagrams
@@ -44,7 +44,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV4_5
+strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV5_3
 ```
 
 ## Install
@@ -123,7 +123,7 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 directory and basename of the spreadsheet path.
 
 Custom displayed crossing IDs use the same syntax as
-`draw_dt_original_labelsV4_5.py`.  V4.0 adds a combined
+`draw_dt_original_labelsV5_3.py`.  V4.0 adds a combined
 `--crossing-labels` option: assignment-style text is detected as a crossing map,
 while a plain list is detected as crossing order.
 
@@ -153,7 +153,7 @@ Drawing settings:
 - V4.0 defaults strand-passage drawings to `shaped-tutte` with `tutte shape =
   ellipse` and `tutte aspect = 1.0`.
 - In the GUI, click `Load drawing session` to load a JSON session saved by
-  `draw_dt_original_labelsV4_5.py`. The saved 2-D drawing settings then apply to
+  `draw_dt_original_labelsV5_3.py`. The saved 2-D drawing settings then apply to
   the root diagram and following strand-passage diagrams.
 - In batch/demo modes, use `--drawing-session path/to/session.json`. If the
   session contains a DT code it is used when `--dt` is not supplied; explicit
@@ -280,7 +280,7 @@ To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
 chmod +x strand_passage_guiV4_0.py
-chmod +x draw_dt_original_labelsV4_5.py
+chmod +x draw_dt_original_labelsV5_3.py
 chmod +x check_two_dt.py
 chmod +x find_link_in_snappy.py
 ```
@@ -311,7 +311,7 @@ sage -python ./strand_passage_guiV4_0.py
   Arial, so text can be selected and edited in Illustrator/Inkscape. V3.8 also
   enlarges the surrounding label boxes/circles so the exported SVG better
   matches the live Matplotlib view in Illustrator.
-- Standalone SVGs from `draw_dt_original_labelsV4_5.py` use the same Arial
+- Standalone SVGs from `draw_dt_original_labelsV5_3.py` use the same Arial
   editable-text policy and roomier DT-label/crossing-ID boxes. V3.13 fixed
   over/under gaps at self-crossings such as the trefoil `DT: [(4,6,2)]`; V3.14
   keeps requested layouts even when they create false crossings, highlights

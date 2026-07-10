@@ -4,6 +4,111 @@ DT Link Toolkit Development Log
 This file records version-specific development notes and implementation history.
 For installation and everyday usage, see README.md.
 
+draw_dt_original_labels V5.3 (2026-07-10)
+-----------------------------------------
+* Surface wireframe styling: --proj-grid-density (meridian count; parallels ~
+  half; 0 = no mesh; needs a projection redraw since the mesh is built with
+  the curve via skeleton_grid=...), --proj-grid-color and --proj-grid-lw
+  (render-side, applied live from the cached curve).
+* Framework chords between crossing anchors can be hidden independently
+  ('framework chords' checkbox / --proj-hide-chords).
+* Mouse roll in the projection window: right-drag or Shift+left-drag rotates
+  about the view axis, pivoting on the canvas centre (incremental atan2 of
+  the cursor about the centre; Tk y-down sign gives the grab-and-turn feel).
+  Left-drag still orbits, wheel still zooms.
+* Render-side style toggles (chords / skeleton / IDs / skeleton-only) now
+  re-render the cached curve immediately -- no 3D rebuild.
+* Projection crossing anchor dots can be shown independently and are hidden by
+  default (`crossing anchor dots` / --proj-crossing-dots).
+* The mapped-surface grid can be fixed to the last projection rebuild view while
+  live orbit/roll rotates the strands (`fixed grid while rotating` /
+  --proj-fixed-grid).
+* strand_passage_guiV4_0.py, link_engine_v4_0.py, and score_diagramV2_0.py now
+  import draw_dt_original_labelsV5_3.py as the live drawing/model helper.
+
+draw_dt_original_labels V5.2 (2026-07-10)
+-----------------------------------------
+User feedback round on V5.1:
+
+* Mapped skeleton redone to match score_diagramV2_0's sphere panels: 'show
+  mapped skeleton' now draws (a) a light depth-shaded WIREFRAME of the whole
+  mapped surface -- a unit-sphere grid stored in skeleton_out['surface_wires'],
+  scaled and passed through the same warp as the strands, so the mesh IS the
+  actual sphere/ellipsoid/cylinder/torus -- (b) NEUTRAL dark-gray framework
+  chords (component colours are reserved for the smooth strands; colouring the
+  chords doubled the palette and read as noise), and (c) black depth-faded
+  anchors.
+* New 2D layout 'sphere-stereo' (the creative answer for FLAT diagrams of
+  links whose rings lie in near-orthogonal planes, e.g. Edwards-Venn AM5,
+  which collapse in every boundary-pinned layout): 3D Kamada-Kawai unit
+  directions + gadget compaction (same machinery as the XYZ pipeline), pole =
+  Fibonacci-sphere direction with the largest angular clearance from all
+  nodes AND strand-arc samples, then stereographic projection from the pole
+  (a homeomorphism of the punctured sphere, so the image is a genuine planar
+  diagram; the pole's face becomes the outer region).  'ring equalize' now
+  also applies here as a smooth power-law radial expansion (gamma = 1-0.6s)
+  about the centroid -- rank-based equalization broke planarity of straight
+  chords (2 false crossings), the smooth monotone map does not (audit-clean at
+  s = 0.5-0.8 with relax 12 + min-sep 0.02 on AM5).
+
+draw_dt_original_labels V5.1 (2026-07-10)
+-----------------------------------------
+Motivation: the corrected Edwards-Venn AM5 code [(32,18,...),...] has rings in
+near-orthogonal planes -- every axis-aligned projection leaves one ring
+edge-on (a sliver), so V5.0 projections were ambiguous.
+
+New in draw_dt_original_labelsV5_1.py:
+* auto_projection_view(): grid+refine search over the view sphere maximizing
+  the WORST component's projected isoperimetric roundness (4*pi*A/P^2), so no
+  ring degenerates edge-on.  'Auto view' buttons + --proj-auto-view.
+* Depth-cue transparency (--proj-depth-fade, default 0.55) for strands and
+  skeleton, following score_diagramV2_0's _draw_sphere_depth style.
+* Perspective camera option (--proj-perspective, scene radii; 0 = ortho).
+* Mapped skeleton is now the whole framework: per-strand quadratic arcs
+  through the connector anchors, component colours, per-segment depth alpha,
+  depth-faded anchor dots; --proj-skeleton-only for a framework-only view
+  (skeleton_out gains 'segment_comps').
+* Projection window: left-drag rotates (0.4 deg/px, throttled fast redraw
+  while dragging -- plain thin lines -- full halo render on release), scroll
+  wheel zooms about the view centre (zoom preserved across re-renders).
+* All new fields in sessions/CLI/help; V4.x and V5.0 sessions still load.
+
+draw_dt_original_labels V5.0 (2026-07-10)
+-----------------------------------------
+Motivation: the 80-crossing closed-fishtail link (16 crossings/band, 5 bands)
+exposed two limits of V4.5 -- the holed-tutte harmonic solve compresses
+interior strands toward the pinned rims (uneven, edge-crowded 2D diagrams),
+and some links (e.g. the Edwards-Venn Brunnian family) have no readable flat
+diagram at all.
+
+New in draw_dt_original_labelsV5_0.py (V5.3 is now the live helper imported by
+the strand-passage and scoring tools):
+* --ring-equalize (holed-tutte): radial histogram equalization across the ring
+  width after the harmonic solve; angles kept; 0..1 blend.
+* --relax-passes / --relax-strength (all 2D layouts): planarity-guarded
+  relaxation (centroid + edge-length equalization); a pass is rejected and the
+  step halved if it would create a straight-edge crossing (vectorized
+  all-pairs segment test); pinned boundary nodes from the layout are held
+  (holed-tutte exports meta 'pinned_nodes'; others pin an angular-bin hull).
+* Illustrative 2D projections of the 3D Sphere-XYZ curve: orthographic
+  projection with depth-ordered chunks stroked over butt-capped white halos
+  (round/projecting halo caps overhang the chunk ends and erase the strand's
+  own continuation -- the butt cap plus one-step chunk overlap is what makes
+  strands continuous with gaps only at true occlusions).  New '3D view' GUI
+  tab + persistent projection window; heavy 3D construction only on 'Redraw 3D
+  projection', quick-view buttons re-project the cached curve.  'Mapped
+  skeleton' overlay = per-crossing anchors + strand chords of the sphere
+  layout, put through the same surface warp (kamada layouts).
+* Save projections as SVG+PNG next to the .xyz ('Save projection(s)' button,
+  'Save XYZ also saves projections' checkbox, CLI --save-projections
+  --proj-views current,top,front,side --proj-elev/azim/roll
+  --proj-line-width --proj-skeleton --proj-skeleton-ids).
+* UI: third parameter tab '3D view'; 'View XYZ' moved there; save-button row
+  compacted; sessions serialize all new fields and still load V4.x files.
+* build_spherical_xyz_components gains skeleton_out=...;
+  _warp_components_to_surface gains return_warp=... (point-set warp reuse).
+
+
 DT-code link toolkit with component-colour-preserving strand-passage
 exploration, drawing, SnapPy/Sage comparison and search utilities, and diagram
 scoring. Every crossing you click in the strand-passage GUI opens a NEW WINDOW
@@ -14,7 +119,7 @@ Files
 -----
     strand_passage_guiV4_0.py         (V4.0) interactive GUI + --nongui + --demo
     link_engine_v4_0.py               (V4.0) passage / DT-choice / SnapPy engine
-    draw_dt_original_labelsV4_5.py    (V4.5) drawing + model layer
+    draw_dt_original_labelsV5_3.py    (V5.3) drawing + model layer
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
     find_link_in_snappy.py            standalone SnapPy database search utility
@@ -71,7 +176,7 @@ What is new in V4.0 (GUI simplify + drawing sessions)
     visualization.  These defaults apply in the GUI, `--demo`, `--nongui`
     overview SVG, and following strand-passage diagrams.
   * Added `--drawing-session PATH` plus the GUI `Load drawing session` button.
-    Sessions saved by draw_dt_original_labelsV4_5.py supply DT/crossing labels
+    Sessions saved by draw_dt_original_labelsV5_3.py supply DT/crossing labels
     and 2-D drawing settings; explicit `--dt` still takes priority in CLI modes.
   * Moved `Close passage windows` and `Load drawing session` to the second
     control row beside the crossing-label field, and added light-blue `?` help
@@ -117,7 +222,7 @@ Utility update (DT comparison CLI)
 
 Drawing helper V4.5 (tabbed parameter panel)
 --------------------------------------------
-  * draw_dt_original_labelsV4_5.py is now the live drawing/model helper imported
+  * draw_dt_original_labelsV4_5.py became the live drawing/model helper imported
     by link_engine_v4_0.py and strand_passage_guiV4_0.py.
   * The standalone helper GUI splits its right-hand parameter panel into two
     independently scrollable tabs: "2D diagram" and "3D XYZ", so only relevant
