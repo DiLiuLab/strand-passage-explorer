@@ -6,6 +6,188 @@ For installation and everyday usage, see README.md.
 
 draw_dt_original_labels V5.4 (2026-07-11)
 -----------------------------------------
+* Rotational-symmetry enforcement (`--enforce-symmetry` / `--no-enforce-symmetry`
+  + GUI checkbox, default on).  A DT with a cyclic symmetry (each component is the
+  next shifted by 2n/k positions, so a 2*pi/k turn maps the link to itself) should
+  draw with that symmetry, but the layout pipeline broke it two ways: ring-equalize
+  redistributed the crossings around the ring non-symmetrically (tangling the
+  otherwise-symmetric solve -- 10 false crossings on the 3-fold BL example), and
+  min-sep relaxation + framing added small asymmetric perturbations.
+  `_detect_dt_rotational_symmetry(model)` finds the largest k>=2 whose position
+  shift s=2n/k is a valid automorphism (crossing permutation + over/under
+  preserved).  When found (and enforcement on), `prepare_diagram` disables
+  ring-equalize for the solve, and after min-sep `symmetrize_positions` snaps the
+  layout onto exact k-fold symmetry by orbit-averaging (Kabsch best-fit rotation
+  must be ~2*pi/k with small residual, else it's a guarded no-op -- so a wrap axis
+  that hides the symmetry, or a non-symmetric link, is left untouched).  On the
+  3-fold BL session this takes residual 0.096 (10 false) -> 0.000 (0 false); the
+  tertiary wrap axis was the one that already revealed the symmetry (best-fit
+  rotation +120deg, vs ~0deg for primary/secondary).  No-op verified on the
+  5-component Edwards-Venn link (no symmetry detected); the trefoil correctly gains
+  its classic 3-fold symmetry.
+* GUI crash fix (`Tcl_AsyncDelete: async handler deleted by the wrong thread` /
+  `Variable.__del__` "main thread is not in main loop", ending in SIGABRT).  The
+  Agg backend was forced only in NON-gui mode, so the GUI used the interactive
+  TkAgg/MacOSX pyplot backend.  Every `plt.subplots()`/`plt.close()` then built a
+  Tk figure manager holding tkinter Variables; the background preview worker does
+  heavy allocation, so its cyclic garbage collector would finalize those
+  Tcl-backed objects off the main thread and abort.  Now `matplotlib.use("Agg")`
+  runs unconditionally -- the GUI embeds figures with `FigureCanvasTkAgg` directly
+  (backend-independent) and never calls `plt.show()`, so it needs no interactive
+  backend; pyplot figures now carry no Tcl objects for the worker's GC to touch.
+* holed-tutte: generalized the 'secondary principal axis' toggle into a 3-way
+  'wrap axis (PCA)' selector (`--wrap-axis {primary,secondary,tertiary}` + GUI
+  dropdown, default primary).  `_holed_torus_coords(G, wrap_axis=...)` now picks the
+  projection plane from the 3D-torus layout's three principal axes (eigh ascending:
+  e[:,2]=widest W, e[:,1]=middle M, e[:,0]=thinnest T): primary=(W,M) donut plane,
+  secondary=(W,T), tertiary=(M,T) -- the plane perpendicular to the widest axis, so
+  the curved axis is orthogonal to both primary and secondary.  Cache key uses the
+  wrap_axis string.  `holed_tutte_layout` gained a `wrap_axis` kwarg; the old
+  `secondary_axis` bool is still accepted and maps to 'secondary' when `wrap_axis`
+  is None, and `--secondary-axis` stays as a deprecated CLI alias.  GUI: the
+  checkbox became a readonly Combobox (primary/secondary/tertiary), moved into
+  session_string_vars (was a bool), with backward-compat load mapping an old
+  boolean `secondary_axis` to 'secondary'.  Verified all three axes give distinct
+  false=0 layouts and secondary matches the old boolean.
+* flatten orthogonal: fixed the horizontal ring doubling back on the 6-comp
+  (62-crossing) link.  The return-arc code assumed the OUT crossing's comp-order
+  SUCCESSOR is the right (larger-s) extreme and its predecessor the left -- true for
+  the 5-comp link, but reversed here (pred = right extreme c57, succ = left extreme
+  c53).  It therefore flung c53 (a left crossing) out to the +R_out right end, so
+  the line jumped ~1.5 spans back and forth.  Now it picks `far` = whichever
+  neighbour has the larger s (attaches to it over the top via the return arc) and
+  `near` = the smaller-s neighbour (a short on-axis diameter hop), placing the apex,
+  the two stretched end corners, and the arc-interval metadata on the correct side.
+  Worst backward step on the horizontal ring dropped from ~1.5 spans to <0.01 (the
+  residual is the sub-percent stub offset where a shared crossing's drawn centre
+  differs slightly from its axis projection -- invisible).  Verified single
+  monotone diameters + perfect semicircles, false=0, on the 5-, 4-, and 6-comp
+  Edwards-Venn links.
+* flatten orthogonal, three more fixes for straightness / circularity / alignment:
+  (a) The arc circle was fitted through three run control points, one of which is
+  the OUT crossing's recomputed centre (mean of its gadget corners); the stretched
+  corners pulled that centre off the true circle, tilting the fit so the inner arc
+  read as an ellipse. Now `_override_flat_component` least-squares-fits the circle
+  through only the run's seg/corner nodes (skipping crossing-centre nodes, index
+  %4==1), which lie exactly on the intended circle -> both arcs are perfect,
+  concentric semicircles. (b) Corners were placed as `mid +/- stub*u` regardless of
+  travel direction, so on the return (leftward/downward) pass the in/out corners
+  were swapped and the straight diameter zig-zagged by ~one stub at each crossing.
+  Now `corners_toward_segs` points each in-corner at the seg it arrived from and
+  each out-corner at the seg it leaves toward, so the diameter is monotone (single
+  direction) and the crossing centre = corner mean stays put. c24's own corners sit
+  just off the leftmost point ON the arc circle. (c) The two flat rings are mutually
+  perpendicular but the collapsed pair can sit at any angle (e.g. 45deg/135deg for
+  the 4-comp Edwards-Venn link, vs 0/90 for the 5-comp one). Before placing, the
+  whole pre-framing layout is now rotated about its centre so the horizontal ring's
+  axis lands on x (the other then on y), keeping the round wreath consistent, so
+  both diameters come out axis-aligned ('always to the left' / 'to the top') for
+  every input. Verified false=0 and clean axis-aligned D's with perfect semicircles
+  on the 5-comp, 4-comp, and 6-comp (62-crossing) Edwards-Venn links.
+* flatten orthogonal, two follow-up fixes: (1) `separation` no longer had a hidden
+  0.05 floor (`R_in = R_out - max(0.05, sep)`), so `separation=0` kept a small gap
+  instead of coinciding; now `R_in = min(R_out, max(0.15*dia, R_out - sep*dia))`,
+  so at `sep=0` the inner and outer radii are equal and the two semicircles overlap
+  in their shared quadrant (a degenerate limit that flags 2 overlap crossings, as
+  expected). (2) The horizontal ring's RIGHT diameter end is the in-corner of the
+  succ extreme (e.g. c29), which is shared with a round ring; stretching it to the
+  end dragged c29's centre out (to +0.72 vs c28 at -0.50) and stretched that round
+  strand. Fixed by recording such stretched corners in `model["flatten_exclude"]`
+  and dropping them from `crossing_centers`' per-crossing average, so the crossing
+  (and the round strand through it) stays put while the flat strand still reaches
+  the end; c29 now sits symmetric to c28 (+0.55 vs -0.50). The vertical ring never
+  had this because its arc ends on seg nodes, not corners.
+* flatten orthogonal: reworked the 'D' geometry into two concentric D's drawn as
+  EXACT straight-line + perfect-semicircle geometry. Each flat ring is now a
+  straight DIAMETER through the centre (all its crossings on it, kept at their own
+  signed axis positions so the diameter is symmetric about the centre) plus a
+  perfect SEMICIRCLE joining the two diameter ends. The horizontal ring is the
+  outer D (semicircle radius `R_out = outer_radius*dia` over the top); the vertical
+  ring the inner D (semicircle radius `R_in = R_out - separation*dia` bulging left).
+  The inner semicircle's leftmost point is the shared OUT crossing, which therefore
+  lands on the outer diameter; the other shared crossing stays at the centre where
+  the diameters cross. Because the arcs are true circles they cannot be Catmull
+  splines through the sparse gadget nodes, so `_flatten_orthogonal_rings` records
+  the arc control-point interval indices per component in `model["flatten_arcs"]`
+  and a render override (`_override_flat_component`, via the shared
+  `_component_dense` used by both `render_diagram` and the false-crossing audit)
+  redraws those intervals as points on the fitted circle and every other interval
+  as a straight segment. This yields perfect semicircles, dead-straight diameters,
+  and genuine tangent-discontinuous right-angle CORNERS at the junctions (Catmull
+  could give none of the three). `separation` changed meaning: it is now the radial
+  GAP between the two concentric D's (inner radius = outer − separation), matching
+  the original 'outer-ring radius + separation of the two rings' request. `false=0`
+  on the 5-component Edwards-Venn link across `outer_radius` 0.9–1.6 / `separation`
+  0.15–0.6; true no-op (empty `flatten_arcs`) when nothing is orthogonal or the
+  option is off. Exact only at `ring_tilt=90` (the flat top view; other tilts are
+  non-affine and warp the circles). (Superseded the asymmetric straight-line +
+  return-arc spline form below.)
+* holed-tutte `use secondary principal axis` (`--secondary-axis` + GUI checkbox).
+  `_holed_torus_coords(G, secondary=...)` builds the closed principal curve from a
+  3D Kamada-Kawai layout projected onto two principal axes of `q3.T @ q3`
+  (`numpy.linalg.eigh`, ascending). Primary uses `evec[:,2]`,`evec[:,1]` (the two
+  widest — the donut plane); secondary swaps the second axis for `evec[:,0]` (the
+  thinnest / hole axis), wrapping the diagram around the perpendicular principal
+  curve. For the Edwards-Venn examples the 3D eigenvalues come out roughly
+  `[small, large, large]` (two near-equal wide axes + one thin), so the secondary
+  view is a real ~90° reorientation, not a trivial rotate. `secondary` is folded
+  into the torus cache key and threaded `holed_tutte_layout` -> `tutte_opts`.
+* GUI: moved every parameter-panel checkbox from `column=1, columnspan=2` to
+  `column=0, columnspan=3` (auto-aspect check to `column=0, columnspan=2`, keeping
+  its value label at column 2) so long checkbox labels are no longer clipped. The
+  flatten radius/separation entries now grey unless the flatten checkbox is on
+  (`flatten_on = is_holed_tutte and flatten_orthogonal_var.get()`), and
+  `flatten_orthogonal_var` was added to the selector-var trace list so toggling it
+  re-runs `_apply_dynamic_states`.
+* Over/under gap rendering: at each crossing the under strand is masked with a
+  white piece (`_plot_local_curve_piece_by_index`, `radius=gap` arc length) and
+  the over strand is redrawn on top. The over piece was hardcoded at `gap * 1.25`,
+  too short to cover the white mask at shallow crossings (a visible white nick).
+  Replaced the constant with an `over_gap_factor` parameter on `render_diagram`
+  (and threaded through `draw` / `render_figure` / `render_prepared_diagram` /
+  `run_pipeline`), default `2.0`, clamped to `>= 1.0` via
+  `over_gap = gap * max(1.0, over_gap_factor)`; applied to both true and
+  false-crossing over pieces. Exposed as `--over-gap-factor` and a GUI `over gap
+  factor` field (saved in sessions, recorded in image metadata).
+* holed-tutte: added `flatten orthogonal components` (`--flatten-orthogonal` +
+  `--flatten-outer-radius` / `--flatten-separation`, and matching GUI fields next
+  to `invert ring`). Rings that lie edge-on to the diagram collapse under the
+  boundary-pinned harmonic solve onto a straight line through the centre
+  (near-zero PCA minor axis), overlapping everything. Verified on three examples
+  (the 5-component link above, plus a 4-component and a 6-component Edwards-Venn
+  case): each has exactly two flat rings sharing exactly two crossings, antipodal
+  in each traversal. The `_flatten_orthogonal_rings(pos, model, center,
+  outer_radius, separation)` helper (called inside `holed_tutte_layout`, after
+  invert-ring and before ring-tilt/framing) detects each near-collinear component
+  (`sv[1]/sv[0] < 0.18`) and redraws it as a big "D": a long straight line plus one
+  large-radius arc. The OUT crossing = the single movable (shared-between-flat)
+  crossing that lies strictly between the ring's two extreme crossings; it is
+  pushed to a shared point `P_out` far to one side along the HORIZONTAL ring's own
+  axis. The construction is asymmetric so `P_out` lands on one ring's straight line
+  and the other ring's arc (their intersection): the horizontal ring (axis nearest
+  x) keeps the out crossing ON its dead-straight line — its only curve is the
+  RETURN connector between the two line ends, thrown over the top via an apex seg
+  node; the vertical ring's arc bulges sideways THROUGH `P_out`, a big circle whose
+  seg-node poles are the line ends `O ± u*(half_len + separation*diameter)` (past
+  the extreme crossings, so those stay internal). Two subtleties keep the vertical
+  arc clean under the uniform (non-centripetal) Catmull-Rom: (a) every line crossing
+  stubs ALONG the ring axis `u` (not `mid[i+1]-mid[i-1]`, which for the extremes
+  points off toward `P_out` and kinks the line); (b) the out crossing's in/out
+  corners are offset a real FRACTION (0.32) of the way toward each pole rather than
+  a tiny stub, so pole->corner->centre is evenly spaced and the tip doesn't pinch a
+  loop (a tiny segment flanked by a far neighbour makes the uniform spline
+  overshoot). Distances are in ring diameters (not the span, which is inflated by
+  the collapsed gadget corners): `outer_radius` (default 1.1) scales `P_out` and
+  the return-arc apex, `separation` (default 0.25) the pole extension. The central
+  shared crossing stays at the centre (both diameters cross there). Only flat
+  components' own gadget nodes move; round-shared crossings keep their centre fixed,
+  so the wreath is untouched. `model` threaded via `tutte_opts["model"]`. True
+  no-op when nothing is orthogonal. The 5-component Edwards-Venn link renders
+  false=0 with c18/c21 and c28/c29 internal on their straight lines, the shared out
+  crossing (c24) far on the left as a clean crossing, and c26 at the centre;
+  `sphere-stereo` stays the route for fully clean overlapping ovals. (Earlier V5.4
+  iterations drew a symmetric big-arc "D" with both arcs connecting extended poles;
+  superseded by this asymmetric straight-line + return-arc form on request.)
 * Added `audit_xyz.py`, an importable and standalone Spherogram/SnapPy audit
   that reconstructs the link represented by a finished 3D polyline and compares
   it with the source signed DT link. Its dependencies are loaded lazily so
@@ -19,6 +201,11 @@ draw_dt_original_labels V5.4 (2026-07-11)
 * `Save XYZ`, `View XYZ`, and `Redraw 3D projection` now use the same repair and
   topology-audit pipeline. Audit results appear in the main status log and as
   persistent color-coded banners in both interactive 3D windows.
+* Follow-up GUI polish: live 2-D state calculation runs on a single background
+  worker with stale jobs discarded, and scroll-panel geometry is debounced so
+  parameter tabs paint before preview work resumes. Fixed projection grids
+  retain their view basis across `Redraw 3D projection`. The projection save
+  dialog now proposes the XYZ basename without its `.xyz` extension.
 * strand_passage_guiV4_0.py, link_engine_v4_0.py, and score_diagramV2_0.py now
   import draw_dt_original_labelsV5_4.py as the live drawing/model helper.
 

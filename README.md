@@ -179,6 +179,65 @@ stereo-safe` (CLI: `--sphere-layout stereo-safe`). The `clearance (0=auto)` and
 `repair 3D strand clearance` GUI controls correspond to `--xyz-clearance` and
 `--no-xyz-repair`, and are saved in V5.4 session files.
 
+For `holed-tutte`, V5.4 adds `flatten orthogonal components`
+(`--flatten-orthogonal` / GUI checkbox, with `--flatten-outer-radius` and
+`--flatten-separation`). A ring that lies in a plane roughly perpendicular to the
+diagram (edge-on) collapses under the boundary-pinned harmonic solve onto a
+straight line through the centre and overlaps everything (for example, two of the
+rings in
+`DT: [(32,18,20,22,24,26,28,30),(34,52,36,54,40,50,42,58),(2,46,6,10,48,14),(4,56,12,60),(-38,8,16,-44)]`
+land on the vertical and horizontal axes). With the option on, each such
+component is redrawn as a **"D"**: a straight **diameter** through the centre
+carrying all its crossings, plus a perfect **semicircle** (half a circle) joining
+the diameter's two ends. The two flat rings share two crossings — the one where the
+diameters cross stays at the **centre**, and the other (the only crossing between a
+ring's two extreme crossings, the "out" crossing) is where the two D's meet. The
+two D's are **concentric**: the **horizontal** ring is the outer D (diameter along
+x, semicircle of radius `R_out` over the top) and the **vertical** ring the inner D
+(diameter along y, semicircle of radius `R_in` bulging left), with the inner
+semicircle's leftmost point (the out crossing) landing on the outer diameter. Each
+crossing keeps its own signed position along the axis (already roughly symmetric),
+so both diameters come out symmetric about the centre; because a diameter meets its
+semicircle at a right angle, the junctions are genuine corners, drawn as exact
+line + circle geometry (a per-component render override, so the arcs are true
+semicircles rather than splines). `--flatten-outer-radius` (default 1.1, in ring
+diameters) is the outer D's radius; `--flatten-separation` (default 0.25) the
+radial gap between the two D's (`R_in = R_out − separation`). Only the
+flat components move; the round rings and every true crossing position are
+preserved. It composes with the other holed-tutte controls (hole ratio / swap /
+invert-ring / ring-tilt / ring-equalize / min-separation). It is tuned for
+axis-aligned orthogonal pairs (the Edwards-Venn example renders with no flagged
+artifacts); for fully clean overlapping ovals the `sphere-stereo` layout remains
+the alternative route.
+
+`holed-tutte` also gains a `wrap axis (PCA)` selector (`--wrap-axis
+{primary,secondary,tertiary}` / GUI dropdown, default `primary`). The layout wraps
+the diagram around a closed principal curved axis built from a 3D-torus layout of
+the crossing graph, projected onto a plane of two of its three principal axes
+(widest **W**, middle **M**, thinnest **T**). `primary` uses the (W, M) donut
+plane (the usual wreath); `secondary` uses (W, T), wrapping around the curve
+perpendicular to primary (the hole/torus axis swapped in for the middle axis);
+`tertiary` uses (M, T), the plane perpendicular to the widest axis — the curved
+axis orthogonal to both. The alternate axes give genuinely different views for
+links whose two ring systems lie in near-orthogonal planes. (`--secondary-axis`
+remains as a deprecated alias for `--wrap-axis secondary`.)
+
+V5.4 also adds **rotational-symmetry enforcement** (`--enforce-symmetry` /
+`--no-enforce-symmetry` / GUI checkbox, default on). When a DT has a cyclic
+symmetry — each component is the next one shifted by `2n/k` positions, so a `2π/k`
+turn maps the whole link to itself — the drawing is snapped onto exact `k`-fold
+rotational symmetry: ring-equalize is disabled (it redistributes the crossings and
+breaks the symmetric arrangement), and the near-symmetric layout is orbit-averaged
+so the `k` rotated copies coincide exactly. It is a no-op for links with no
+detected symmetry, or when the chosen wrap axis does not already put the layout
+close to that rotation — the **tertiary** wrap axis often reveals a symmetry the
+primary/secondary do not.
+
+The standalone helper computes live 2-D preview state on a background worker,
+so switching among the parameter tabs remains responsive. With `fixed grid
+while rotating` enabled, `Redraw 3D projection` preserves the currently locked
+grid basis. `Save projection(s)` proposes a clean basename without `.xyz`.
+
 Spreadsheet columns to know:
 
 - `DT_code_chosen` is the visible DT code used for the drawn structure and for
