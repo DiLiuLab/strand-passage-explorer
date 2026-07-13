@@ -29,7 +29,7 @@ Development notes and version history are in [DEVELOPMENT_LOG.md](DEVELOPMENT_LO
 ```text
 strand_passage_guiV4_0.py        Main entry point: GUI, --nongui, and --demo
 link_engine_v4_0.py              Diagram engine and SnapPy bridge
-draw_dt_original_labelsV5_4.py   DT parser, layout, renderer, XYZ audit, and GUI
+draw_dt_original_labelsV5_5.py   DT parser, layout, renderer, XYZ audit, and GUI
 audit_xyz.py                     Audit a 3D XYZ curve against its signed DT link
 check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
@@ -45,7 +45,7 @@ LICENSE                          MIT license
 Import chain:
 
 ```text
-strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV5_4
+strand_passage_guiV4_0 -> link_engine_v4_0 -> draw_dt_original_labelsV5_5
 ```
 
 ## Install
@@ -124,7 +124,7 @@ If the path does not end in `.xlsx`, the script adds it first. For example,
 directory and basename of the spreadsheet path.
 
 Custom displayed crossing IDs use the same syntax as
-`draw_dt_original_labelsV5_4.py`.  V4.0 adds a combined
+`draw_dt_original_labelsV5_5.py`.  V4.0 adds a combined
 `--crossing-labels` option: assignment-style text is detected as a crossing map,
 while a plain list is detected as crossing order.
 
@@ -154,7 +154,7 @@ Drawing settings:
 - V4.0 defaults strand-passage drawings to `shaped-tutte` with `tutte shape =
   ellipse` and `tutte aspect = 1.0`.
 - In the GUI, click `Load drawing session` to load a JSON session saved by
-  `draw_dt_original_labelsV5_4.py`. The saved 2-D drawing settings then apply to
+  `draw_dt_original_labelsV5_5.py`. The saved 2-D drawing settings then apply to
   the root diagram and following strand-passage diagrams.
 - In batch/demo modes, use `--drawing-session path/to/session.json`. If the
   session contains a DT code it is used when `--dt` is not supplied; explicit
@@ -166,7 +166,7 @@ Drawing settings:
 Standalone drawing and audited XYZ export:
 
 ```bash
-sage -python draw_dt_original_labelsV5_4.py --dt "DT: [(4,6,2)]"
+sage -python draw_dt_original_labelsV5_5.py --dt "DT: [(4,6,2)]"
 sage -python audit_xyz.py link_sphere.xyz "DT: [(4,6,2)]"
 ```
 
@@ -237,6 +237,21 @@ The standalone helper computes live 2-D preview state on a background worker,
 so switching among the parameter tabs remains responsive. With `fixed grid
 while rotating` enabled, `Redraw 3D projection` preserves the currently locked
 grid basis. `Save projection(s)` proposes a clean basename without `.xyz`.
+
+V5.5 reworks the standalone helper's live 3-D projection window. Left-drag is now
+a free **trackball**: the object follows the cursor, with a horizontal drag
+spinning it about the screen's vertical axis, a vertical drag about the screen's
+horizontal axis, and a right-drag (or Shift+left-drag) rolling it about the axis
+perpendicular to the screen — there is no elevation pole to stall against. Live
+dragging is also much faster (the framework overlay is stroked as flat single
+lines while dragging and restored to the full depth-shaded halo on release, and
+the view is framed to the object's bounding sphere so an orbit only rotates the
+curve). New over/under gap and hide controls (GUI `3D view` tab + CLI, applied
+live and to saved projections): `crossing gap factor` (`--proj-gap-factor`,
+default 2.8) scales the white gap where a nearer strand crosses over a farther
+one, `over/under crossing gaps` (`--proj-no-gaps`) toggles the gaps off so strands
+overlap solid, and `hide components` (`--proj-hide-components`, a 1-based list
+like `1,3`) hides individual rings to isolate one ring system in a dense link.
 
 Spreadsheet columns to know:
 
@@ -356,7 +371,7 @@ To make the Python scripts directly executable on macOS/Linux:
 
 ```bash
 chmod +x strand_passage_guiV4_0.py
-chmod +x draw_dt_original_labelsV5_4.py
+chmod +x draw_dt_original_labelsV5_5.py
 chmod +x audit_xyz.py
 chmod +x check_two_dt.py
 chmod +x find_link_in_snappy.py
@@ -388,7 +403,7 @@ sage -python ./strand_passage_guiV4_0.py
   Arial, so text can be selected and edited in Illustrator/Inkscape. V3.8 also
   enlarges the surrounding label boxes/circles so the exported SVG better
   matches the live Matplotlib view in Illustrator.
-- Standalone SVGs from `draw_dt_original_labelsV5_4.py` use the same Arial
+- Standalone SVGs from `draw_dt_original_labelsV5_5.py` use the same Arial
   editable-text policy and roomier DT-label/crossing-ID boxes. V3.13 fixed
   over/under gaps at self-crossings such as the trefoil `DT: [(4,6,2)]`; V3.14
   keeps requested layouts even when they create false crossings, highlights

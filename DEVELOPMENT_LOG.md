@@ -4,6 +4,39 @@ DT Link Toolkit Development Log
 This file records version-specific development notes and implementation history.
 For installation and everyday usage, see README.md.
 
+draw_dt_original_labels V5.5 (2026-07-12)
+-----------------------------------------
+* 3D projection window navigation is now a free screen-axis TRACKBALL (Blender /
+  ChimeraX / Maya tumble) instead of the elev/azim turntable.  Each motion applies
+  an incremental rotation about the CURRENT screen axes -- horizontal drag about
+  the screen vertical (y) axis, vertical drag about the screen horizontal (x)
+  axis, right-/Shift-drag about the screen z axis (roll) -- with the object
+  following the cursor.  The step is composed on the camera basis and decoded back
+  to the renderer's (elev, azim, roll) each frame (`_rotate_view_screen_axes` +
+  `_projection_angles_from_basis`, an exact inverse of `_projection_basis`, verified
+  to round-trip to ~1e-15), so view presets and saved projections stay
+  interoperable and there is no elevation pole to stall against.  (Earlier drafts
+  tried the elev/azim turntable and a reversed "move the camera" convention; both
+  felt unintuitive near the poles.)
+* Live projection dragging is much smoother.  While a drag is in progress the
+  skeleton/framework overlay is stroked as flat single-line polylines (the full
+  depth-shaded halo returns on mouse release) instead of hundreds of per-chunk
+  plot calls, crossing dots/IDs are skipped, and the view is framed to the
+  object's rotation-invariant bounding sphere so an orbit only ROTATES the curve
+  instead of autoscaling ("breathing") every frame -- ~9x fewer artists per frame
+  on a skeleton-heavy view.
+* Projection over/under gap and hide controls (GUI '3D view' tab + CLI, applied
+  live and to saved projections): `crossing gap factor` (`--proj-gap-factor`,
+  default 2.8) scales the white occlusion gap at apparent crossings as a multiple
+  of the line width; `over/under crossing gaps` (`--proj-no-gaps`) draws strands
+  solid with no break; `hide components` (`--proj-hide-components`, a 1-based list
+  like `1,3`) hides individual rings.  Threaded through
+  `render_projection_on_axis` / `save_projection_images` and the session files.
+* Renamed the drawing/model helper to draw_dt_original_labelsV5_5.py and repointed
+  the importers -- strand_passage_guiV4_0.py, link_engine_v4_0.py,
+  score_diagramV2_0.py -- to it; the previous draw_dt_original_labelsV5_4.py is
+  archived under old_scripts/.
+
 draw_dt_original_labels V5.4 (2026-07-11)
 -----------------------------------------
 * Rotational-symmetry enforcement (`--enforce-symmetry` / `--no-enforce-symmetry`
@@ -286,7 +319,7 @@ interior strands toward the pinned rims (uneven, edge-crowded 2D diagrams),
 and some links (e.g. the Edwards-Venn Brunnian family) have no readable flat
 diagram at all.
 
-New in draw_dt_original_labelsV5_0.py (V5.4 is now the live helper imported by
+New in draw_dt_original_labelsV5_0.py (V5.5 is now the live helper imported by
 the strand-passage and scoring tools):
 * --ring-equalize (holed-tutte): radial histogram equalization across the ring
   width after the harmonic solve; angles kept; 0..1 blend.
@@ -324,7 +357,7 @@ Files
 -----
     strand_passage_guiV4_0.py         (V4.0) interactive GUI + --nongui + --demo
     link_engine_v4_0.py               (V4.0) passage / DT-choice / SnapPy engine
-    draw_dt_original_labelsV5_4.py    (V5.4) drawing + model layer
+    draw_dt_original_labelsV5_5.py    (V5.5) drawing + model layer
     audit_xyz.py                       XYZ topology audit helper / CLI
     check_two_dt.py                   standalone SnapPy/Sage utility: compare two
                                       DT codes (topology + Jones + backtrack test)
@@ -395,7 +428,7 @@ Scoring utility V2.0
     alternative simplified diagrams of one link, deduplicating signed diagram
     isomorphs, scoring each representative, and writing Excel/SVG/JSON reports.
   * The tool imports the live V4.0 engine and drawing helper (V4.5 at its
-    initial release; V5.4 now), uses the same backtrack-simplify mechanism for
+    initial release; V5.5 now), uses the same backtrack-simplify mechanism for
     generation, and scores canonical DT forms so representative rankings are
     reproducible across relabellings.
   * With no arguments it opens a Tk configuration GUI; CLI mode supports
