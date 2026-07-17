@@ -243,16 +243,30 @@ def _perm_order(sigma):
 _DRAW_CACHE = {}
 
 
+def _version_key(path):
+    """Sort key for a versioned filename: its trailing V<major>_<minor>... as ints.
+
+    Compares NUMERICALLY.  Plain text ordering would rank a future 'V10_0' below
+    'V5_5', because '1' sorts before '5' character-wise.  Accepts every suffix
+    spelling in this repo -- 'V5_5' (no separator), '_v4_0', '_V2_0'.  An
+    unversioned file yields (), sorting below any versioned one.
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    m = re.search(r"[_-]?[Vv](\d[A-Za-z0-9_]*)$", stem)
+    return tuple(int(n) for n in re.findall(r"\d+", m.group(1))) if m else ()
+
+
 def _load_draw_module():
     """Load the highest-versioned draw_dt_original_labels*.py sitting next to us."""
     if "mod" in _DRAW_CACHE:
         return _DRAW_CACHE["mod"]
     import importlib.util
     base = os.path.dirname(os.path.abspath(__file__))
-    matches = sorted(glob.glob(os.path.join(base, "draw_dt_original_labels*.py")))
+    matches = glob.glob(os.path.join(base, "draw_dt_original_labels*.py"))
     if not matches:
         raise ImportError("draw_dt_original_labels*.py not found next to canonical_dt_V2_0.py")
-    path = matches[-1]
+    # basename breaks ties, so an equal-version pair resolves deterministically
+    path = max(matches, key=lambda p: (_version_key(p), os.path.basename(p)))
     name = os.path.splitext(os.path.basename(path))[0]
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)

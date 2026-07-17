@@ -49,6 +49,7 @@ import json
 import math
 import os
 import random
+import re
 import sys
 import time
 
@@ -88,16 +89,30 @@ def _load_local(name, filename):
     return mod
 
 
+def _version_key(path):
+    """Sort key for a versioned filename: its trailing V<major>_<minor>... as ints.
+
+    Compares NUMERICALLY.  Plain text ordering would rank a future 'V10_0' below
+    'V5_5', because '1' sorts before '5' character-wise.  Accepts every suffix
+    spelling in this repo -- 'V5_5' (no separator), '_v4_0', '_V2_0'.  An
+    unversioned file yields (), sorting below any versioned one.
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    m = re.search(r"[_-]?[Vv](\d[A-Za-z0-9_]*)$", stem)
+    return tuple(int(n) for n in re.findall(r"\d+", m.group(1))) if m else ()
+
+
 def _find_draw_module():
     """Locate the current draw_dt_original_labels*.py, auto-adapting across version bumps
-    (e.g. V4_5 -> V5_5). Picks the highest-versioned file at the top level."""
+    (e.g. V4_5 -> V5_5 -> V10_0). Picks the highest-versioned file at the top level."""
     import glob
     for base in (_HERE, os.getcwd(), os.environ.get("DDOL_DIR", "")):
         if not base:
             continue
-        matches = sorted(glob.glob(os.path.join(base, "draw_dt_original_labels*.py")))
+        matches = glob.glob(os.path.join(base, "draw_dt_original_labels*.py"))
         if matches:
-            path = matches[-1]                      # highest version, e.g. V5_5 > V4_5
+            # basename breaks ties, so an equal-version pair resolves deterministically
+            path = max(matches, key=lambda p: (_version_key(p), os.path.basename(p)))
             if base not in sys.path:
                 sys.path.insert(0, base)
             return os.path.splitext(os.path.basename(path))[0], path
