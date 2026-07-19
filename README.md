@@ -36,6 +36,7 @@ check_two_dt.py                  Standalone SnapPy/Sage DT-comparison utility
 find_link_in_snappy.py           Search SnapPy link databases for DT matches
 score_diagramV2_1.py             Generate, deduplicate, score, and rank diagrams
 canonical_dt_V2_0.py             Canonical DT code (up to mirror) and symmetry
+figure_to_dt.py                  Extract a DT code from a diagram image
 assets/strand_passage_icon.png   Optional window/task-menu icon
 assets/score_diagram_icon.png    Optional icon for the diagram scoring GUI
 bin/strand-passage               Convenience launcher for the strand-passage GUI
@@ -104,6 +105,7 @@ draw             DT diagram drawing and 3-D XYZ export
 strand-passage   Strand-passage explorer (GUI / --nongui / --demo)
 score            Diagram generation, deduplication, and scoring
 canonical        Canonical DT code and diagram symmetry
+figure           Extract a DT code from a diagram image
 find             Search SnapPy databases for a DT match
 ```
 
@@ -130,6 +132,10 @@ library importable?
 - **Headless runs** (`--nongui`, `--demo`, `--help`, `find`, or any tool given
   CLI arguments) prefer an interpreter that has Sage, so Jones polynomials stay
   available.
+- A tool can also declare a **capability requirement** that overrides the above:
+  the `figure` tool needs `scikit-image` (usually installed in the plain Python 3,
+  not Sage), so both its GUI and headless runs are sent to a scikit-image-capable
+  interpreter.
 
 This matters on a machine where Sage is built against Tcl/Tk 9 but ships a
 matplotlib whose `_tkagg` still expects Tcl 8: importing it fails with
@@ -390,6 +396,27 @@ available, and what `score_diagramV2_1.py` uses to name a diagram's group. The
 rotation system and an eigenvalue fit; it is richer (mirrors, inversion,
 rotoreflections) but needs the drawing engine and a numerical tolerance, so it
 can be unavailable where the combinatorial count still succeeds.
+
+Extract a DT code from an image:
+
+```bash
+python3 figure_to_dt.py                      # no arguments -> graphical interface
+python3 figure_to_dt.py diagram.png
+python3 figure_to_dt.py diagram.png --annotate out.png --validate
+python3 figure_to_dt.py messy.png --method fill
+```
+
+`figure_to_dt.py` reads a raster image of a knot/link diagram and extracts an
+extended DT code. Each component must be one distinct, saturated color on a light
+background, and under-pass gaps must be genuine color breaks: the bridged strand
+at a crossing is read as the under strand. The default `trace` method (skeleton +
+gap bridging) also handles a component that crosses itself; `--method fill` is a
+robust fallback for messy inputs that cannot represent self-crossings. Run with no
+image (or `--gui`) to open a small interface for choosing the image, tuning
+options, and viewing the annotated result. **Always check the annotated figure and
+the printed crossing table** — ambiguous over/under calls are flagged. It needs
+`scikit-image`, `scipy`, and `Pillow` (installed in the plain Python 3, not Sage);
+`spherogram` is optional, for `--validate`.
 
 ## Pull Updates
 

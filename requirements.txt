@@ -24,6 +24,14 @@ openpyxl>=3.0
 # in symmetry scoring. The tool has a greedy fallback when SciPy is absent.
 # scipy>=1.7
 
+# Needed only for figure_to_dt.py (extract a DT code from a diagram image):
+# scikit-image, SciPy, and Pillow. These typically live in the plain Python 3
+# environment rather than Sage, which is why the launcher runs the figure tool
+# under Python 3. spherogram (optional) enables its --validate check.
+scikit-image>=0.19
+scipy>=1.7
+Pillow>=8.0
+
 # If you want SnapPy without Sage (limited; Jones needs Sage), you can try:
 #   pip install snappy
 # but the supported path for this project is `sage -python`.

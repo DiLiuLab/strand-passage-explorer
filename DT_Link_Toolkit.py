@@ -14,6 +14,7 @@ Tools:
     strand-passage   Strand-passage explorer (GUI / --nongui / --demo)
     score            Diagram generation, deduplication, and scoring
     canonical        Canonical DT code and diagram symmetry
+    figure           Extract a DT code from a diagram image
     find             Search SnapPy databases for a DT match
 
 Version-independent tool lookup
@@ -31,16 +32,20 @@ for Jones polynomials) or under a plain Python 3.  Neither is always the right
 answer, so the launcher *probes* each available interpreter once and caches what
 it found:
 
-  * ``tkagg``  -- can matplotlib open a Tk window?  (needed by every GUI tool)
-  * ``sage``   -- is the Sage library importable?   (needed for Jones under Sage)
-  * ``snappy`` -- is SnapPy importable?
+  * ``tkagg``   -- can matplotlib open a Tk window?  (needed by every GUI tool)
+  * ``sage``    -- is the Sage library importable?   (needed for Jones under Sage)
+  * ``snappy``  -- is SnapPy importable?
+  * ``skimage`` -- is scikit-image importable?       (needed by the figure tool)
 
 A GUI run is then sent to an interpreter whose TkAgg actually works, and a
 headless run prefers an interpreter that has Sage.  This matters in practice: a
 Sage built against Tcl/Tk 9 can ship a matplotlib whose ``_tkagg`` still expects
 Tcl 8, which fails at import with "Failed to load Tcl_SetVar" -- Sage is then
-perfectly good for headless work but cannot open a GUI.  Override the choice
-with ``--interp sage`` or ``--interp python``, and re-probe with ``--rescan``.
+perfectly good for headless work but cannot open a GUI.  A tool can also declare
+capability ``needs`` (the figure tool needs ``skimage``, which typically lives in
+the plain Python 3 rather than Sage); such a tool is steered to an interpreter
+that satisfies them for both its GUI and headless runs.  Override the choice with
+``--interp sage`` or ``--interp python``, and re-probe with ``--rescan``.
 """
 
 from __future__ import annotations
@@ -58,7 +63,7 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2   # bumped when the probe's capability set changed (added skimage)
 CACHE_DIR = Path(
     os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
 ) / "dt_link_toolkit"
@@ -78,6 +83,8 @@ class Tool(NamedTuple):
     desc: str
     gui: str                      # "optional" | "default" | "never"
     headless_flags: Tuple[str, ...] = ()
+    needs: Tuple[str, ...] = ()   # capabilities the tool requires (probe keys),
+    #                               e.g. ("skimage",); steers interpreter choice
 
 
 # ``gui`` says how the tool decides between a window and a headless run:
@@ -113,6 +120,17 @@ TOOLS: Tuple[Tool, ...] = (
         aliases=("canonical", "canonical-dt", "canon", "symmetry"),
         desc="Canonical DT code and diagram symmetry",
         gui="optional",
+    ),
+    Tool(
+        key="figure",
+        base="figure_to_dt",
+        aliases=("figure", "figure-to-dt", "image", "img2dt", "trace"),
+        desc="Extract a DT code from a diagram image",
+        gui="optional",
+        # Needs scikit-image (both trace and fill methods); on this setup only the
+        # plain Python 3 has it, not Sage -- so both its GUI and headless runs are
+        # steered to a skimage-capable interpreter rather than the usual Sage one.
+        needs=("skimage",),
     ),
     Tool(
         key="find",
@@ -196,7 +214,7 @@ try:
 except Exception as exc:
     caps["tkagg"] = False
     caps["tkagg_error"] = "{}: {}".format(type(exc).__name__, exc)[:200]
-for mod in ("sage", "snappy", "spherogram"):
+for mod in ("sage", "snappy", "spherogram", "skimage"):
     try:
         __import__(mod)
         caps[mod] = True
@@ -296,10 +314,22 @@ def choose_interp(
     need_gui: bool,
     prefer: str = "auto",
     rescan: bool = False,
+    needs: Sequence[str] = (),
 ) -> Tuple[Optional[Interp], List[str]]:
-    """Pick an interpreter for this run; also return notes to show the user."""
+    """Pick an interpreter for this run; also return notes to show the user.
+
+    ``needs`` lists extra capabilities the tool requires (probe keys such as
+    ``"skimage"``).  Interpreters that have them are preferred over Sage, and a
+    warning is emitted if none can satisfy them.
+    """
     found = interpreters(rescan)
     notes: List[str] = []
+
+    def satisfies(interp: Interp) -> bool:
+        return all(interp.has(cap) for cap in needs)
+
+    def missing(interp: Interp) -> List[str]:
+        return [cap for cap in needs if not interp.has(cap)]
 
     if prefer in ("sage", "python"):
         for interp in found:
@@ -311,6 +341,9 @@ def choose_interp(
                             prefer, interp.caps.get("tkagg_error", "TkAgg unavailable")
                         )
                     )
+                if needs and not satisfies(interp):
+                    notes.append("warning: --interp {} is missing {} required by this "
+                                 "tool; it may fail.".format(prefer, ", ".join(missing(interp))))
                 return interp, notes
         notes.append("error: --interp {} requested but not available".format(prefer))
         return None, notes
@@ -324,9 +357,15 @@ def choose_interp(
                 "everywhere). Run a headless mode, or repair Tk/matplotlib."
             )
             return None, notes
-        # Prefer one that also has Sage, so GUI runs keep Jones polynomials.
-        best = next((i for i in usable if i.has("sage")), usable[0])
-        if not best.has("sage"):
+        # Among GUI-capable interpreters, honour the tool's capability needs
+        # first, then prefer one that also has Sage (so Jones stays available).
+        pool = [i for i in usable if satisfies(i)] or usable
+        best = next((i for i in pool if i.has("sage")), pool[0])
+        if needs and not satisfies(best):
+            notes.append("warning: {} is missing {} required by this tool; it may fail."
+                         .format(best.display, ", ".join(missing(best))))
+        elif not needs and not best.has("sage"):
+            # Only relevant to the Sage-backed drawing/scoring tools.
             sage_only = next((i for i in found if i.has("sage") and not i.has("tkagg")), None)
             if sage_only is not None:
                 notes.append(
@@ -338,13 +377,19 @@ def choose_interp(
                 )
         return best, notes
 
-    # Headless: Sage gives the fullest algebra.
-    best = next((i for i in found if i.has("sage")), None)
+    # Headless: honour capability needs first; otherwise Sage gives the fullest algebra.
+    pool = [i for i in found if satisfies(i)] if needs else list(found)
+    if not pool:
+        pool = list(found)
+    best = next((i for i in pool if i.has("sage")), pool[0] if pool else None)
     if best is None:
-        best = found[0] if found else None
-        if best is not None:
-            notes.append("note: no Sage found; running {} without Sage algebra."
-                         .format(best.display))
+        return None, notes
+    if needs and not satisfies(best):
+        notes.append("warning: {} is missing {} required by this tool; it may fail."
+                     .format(best.display, ", ".join(missing(best))))
+    elif not needs and not best.has("sage"):
+        notes.append("note: no Sage found; running {} without Sage algebra."
+                     .format(best.display))
     return best, notes
 
 
@@ -362,7 +407,8 @@ def build_command(
     if script is None:
         return None, ["error: no script for tool '{}' (expected '{}*.py' in {})"
                       .format(tool.key, tool.base, PROJECT_DIR)]
-    interp, notes = choose_interp(wants_gui(tool, args), prefer, rescan)
+    interp, notes = choose_interp(wants_gui(tool, args), prefer, rescan,
+                                  needs=tool.needs)
     if interp is None:
         return None, notes
     return list(interp.cmd) + [str(script)] + list(args), notes
@@ -484,7 +530,7 @@ def gui_launcher(prefer: str = "auto") -> int:
         found = interpreters(rescan)
         bits = []
         for interp in found:
-            caps = [c for c in ("tkagg", "sage", "snappy") if interp.has(c)]
+            caps = [c for c in ("tkagg", "sage", "snappy", "skimage") if interp.has(c)]
             bits.append("{} [{}]".format(interp.display, ", ".join(caps) or "none"))
         status_var.set(" | ".join(bits) if bits else "no interpreters found")
         gui_i, notes = choose_interp(True, prefer)
@@ -530,7 +576,7 @@ def print_list(rescan: bool = False, stream=sys.stdout) -> None:
             tool.key, script.name if script else "(not found)", w=width))
     stream.write("\nInterpreters:\n")
     for interp in interpreters(rescan):
-        caps = [c for c in ("tkagg", "sage", "snappy") if interp.has(c)]
+        caps = [c for c in ("tkagg", "sage", "snappy", "skimage") if interp.has(c)]
         stream.write("  {:<24} [{}]\n".format(interp.display, ", ".join(caps) or "none"))
         if not interp.has("tkagg") and interp.caps.get("tkagg_error"):
             stream.write("  {:<24}  no GUI: {}\n".format("", interp.caps["tkagg_error"]))
